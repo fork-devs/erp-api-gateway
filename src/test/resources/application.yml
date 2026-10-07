@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: erp-api-gateway-test
+
+erp:
+  gateway:
+    jwks-url: http://localhost:8081/.well-known/jwks.json
+    tenant-service-url: http://localhost:8082
+    default-timeout-ms: 5000
+    routes:
+      auth-service:
+        path-prefix: /api/v1/auth
+        target-url: http://localhost:8081
+        requires-auth: false
+      fleet-service:
+        path-prefix: /api/v1/fleet
+        target-url: http://localhost:8083
+        requires-auth: true
