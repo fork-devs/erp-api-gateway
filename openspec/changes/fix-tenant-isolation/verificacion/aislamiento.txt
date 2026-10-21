@@ -1,0 +1,68 @@
+=== Verificacion de aislamiento entre talleres (fix-tenant-isolation) ===
+Generado: 2026-10-20T23:59:28-05:00
+
+--- 1) El tenant NUNCA se toma del cuerpo de la peticion para operaciones autenticadas ---
+    Excepcion documentada: los flujos de ARRANQUE (login, refresh, reset) declaran el
+    taller como FILTRO, porque la consulta por hash ocurre antes de conocer la fila.
+    La RLS exige que la fila pertenezca a ese taller, de modo que declararlo no
+    puede ampliar el acceso, solo acotarlo.
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:52:        LoginCommand command = new LoginCommand(request.email(), request.password(), request.tenantId());
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:54:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:74:        RefreshTokenCommand command = new RefreshTokenCommand(request.refreshToken(), request.tenantId());
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:76:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:96:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:105:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:106:            passwordResetUseCase.requestPasswordReset(new ForgotPasswordCommand(request.email(), request.tenantId()));
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:114:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:116:                    new ResetPasswordCommand(request.token(), request.newPassword(), request.tenantId()));
+
+--- 2) El alta de usuario NO acepta tenant ni roles libres del cliente ---
+    RegisterUserRequest:
+    RegisterUserCommand (el tenant llega YA RESUELTO desde el principal):
+      17:        TenantId tenantId,
+      22:        RoleCode actorRole
+
+--- 3) El contexto de tenant lo fija el PRINCIPAL, no la fila ---
+    (si lo fijase la fila, la comprobacion de la politica seria siempre satisfacida)
+    erp-auth-service/src/main/java/com/erp/auth/infrastructure/persistence/rls/TenantContextScope.java:28:    public static TenantContextScope forTenant(UUID tenantId) {
+    erp-auth-service/src/main/java/com/erp/auth/infrastructure/persistence/rls/TenantContextScope.java:30:        TenantContextHolder.setTenantId(tenantId);
+    erp-auth-service/src/main/java/com/erp/auth/infrastructure/persistence/rls/TenantContextScope.java:43:            TenantContextHolder.setTenantId(previousTenantId);
+    erp-auth-service/src/main/java/com/erp/auth/infrastructure/security/filter/JwtAuthenticationFilter.java:56:                                TenantContextHolder.setTenantId(UUID.fromString(tenantIdClaim));
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:54:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:76:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:96:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:105:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-auth-service/src/main/java/com/erp/auth/interfaces/rest/controller/AuthController.java:114:        try (TenantContextScope scope = TenantContextScope.forTenant(request.tenantId())) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/controller/IdentityValidationController.java:68:        try (TenantContextScope scope = TenantContextScope.forTenant(tenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/controller/ElectronicInvoicingController.java:152:        try (TenantContextScope scope = TenantContextScope.forTenant(tenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/controller/IntegrationAdminController.java:171:        try (TenantContextScope scope = TenantContextScope.forTenant(tenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/controller/PaymentIntegrationController.java:86:        try (TenantContextScope scope = TenantContextScope.forTenant(tenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/support/TenantContextScope.java:23:    public static TenantContextScope forTenant(UUID tenantId) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/support/TenantContextScope.java:25:        TenantContextHolder.setTenantId(tenantId);
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/support/TenantContextScope.java:38:            TenantContextHolder.setTenantId(previousTenantId);
+    erp-tenant-service/src/main/java/com/erp/tenant/infrastructure/security/JwtAuthenticationFilter.java:106:                TenantContextHolder.setTenantId(tenantId);
+
+--- 4) La cabecera X-Tenant-ID solo se usa como PISTA y se contrasta con el principal ---
+    erp-integration-hub/src/main/java/com/erp/integrationhub/infrastructure/security/AuthenticatedUser.java:14: *       ({@link #canOperateOnTenant}): un usuario de un taller solo opera
+    erp-integration-hub/src/main/java/com/erp/integrationhub/infrastructure/security/AuthenticatedUser.java:55:    public boolean canOperateOnTenant(UUID requestedTenantId) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/infrastructure/security/InternalServiceAuthenticationFilter.java:200:                if (!authenticatedUser.canOperateOnTenant(requestedTenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/controller/IntegrationAdminController.java:78:        if (tenantId != null && authUser != null && !authUser.canOperateOnTenant(tenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/controller/IntegrationAdminController.java:127:        if (tenantId != null && authUser != null && !authUser.canOperateOnTenant(tenantId)) {
+    erp-integration-hub/src/main/java/com/erp/integrationhub/interfaces/rest/support/TenantResolver.java:41:        if (!user.canOperateOnTenant(requestedTenantId)) {
+
+--- 5) RLS HABILITADA Y FORZADA en las tablas de negocio ---
+    erp-auth-service/src/main/resources/db/migration/V3__configure_tenant_rls.sql:1:ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    erp-auth-service/src/main/resources/db/migration/V3__configure_tenant_rls.sql:2:ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+    erp-auth-service/src/main/resources/db/migration/V5__force_tenant_rls.sql:6:-- 1) FORCE ROW LEVEL SECURITY. En PostgreSQL, ENABLE ROW LEVEL SECURITY NO
+    erp-auth-service/src/main/resources/db/migration/V6__add_tenant_id_to_token_tables.sql:46:ALTER TABLE refresh_tokens ENABLE ROW LEVEL SECURITY;
+    erp-auth-service/src/main/resources/db/migration/V6__add_tenant_id_to_token_tables.sql:89:ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+    erp-integration-hub/src/main/resources/db/migration/V3__enable_tenant_rls.sql:29:ALTER TABLE idempotency_keys ENABLE ROW LEVEL SECURITY;
+    erp-integration-hub/src/main/resources/db/migration/V3__enable_tenant_rls.sql:45:ALTER TABLE integration_attempts ENABLE ROW LEVEL SECURITY;
+    erp-integration-hub/src/main/resources/db/migration/V3__enable_tenant_rls.sql:61:ALTER TABLE integration_retry_tasks ENABLE ROW LEVEL SECURITY;
+
+--- 6) El servicio de tenants no expone endpoints sin autenticar ---
+    25: * {@code /api/v1/**} estaba en permitAll, con lo que cualquiera podia crear,
+    43:                        .requestMatchers(
+    48:                        ).permitAll()
+    49:                        .requestMatchers("/api/v1/internal/**").hasAnyRole("ADMIN_TALLER", "SUPERADMIN", "INTERNAL_SERVICE")
+    50:                        .requestMatchers("/api/v1/**").authenticated()
