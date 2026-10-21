@@ -17,6 +17,7 @@ import com.erp.apigateway.infrastructure.security.JwksKeyManager;
 import com.erp.apigateway.infrastructure.security.NimbusJwtValidatorAdapter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
@@ -32,8 +33,11 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public JwtValidatorPort jwtValidatorPort(JwksKeyManager jwksKeyManager) {
-        return new NimbusJwtValidatorAdapter(jwksKeyManager);
+    public JwtValidatorPort jwtValidatorPort(
+            JwksKeyManager jwksKeyManager,
+            @Value("${erp.security.jwt.issuer:https://auth.erp-automotriz.com}") String issuer,
+            @Value("${erp.security.jwt.audience:erp-api-gateway}") String audience) {
+        return new NimbusJwtValidatorAdapter(jwksKeyManager, issuer, audience);
     }
 
     @Bean
