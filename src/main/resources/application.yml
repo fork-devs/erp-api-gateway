@@ -21,6 +21,11 @@ erp:
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
         timeout-ms: 10000
+      users-service:
+        path-prefix: /api/v1/users
+        target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+        requires-auth: true
+        timeout-ms: 10000
       tenant-service:
         path-prefix: /api/v1/tenants
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}

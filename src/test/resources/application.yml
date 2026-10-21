@@ -17,9 +17,46 @@ erp:
     routes:
       auth-service:
         path-prefix: /api/v1/auth
-        target-url: http://localhost:8081
+        target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
+        timeout-ms: 10000
+      users-service:
+        path-prefix: /api/v1/users
+        target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+        requires-auth: true
+        timeout-ms: 10000
+      tenant-service:
+        path-prefix: /api/v1/tenants
+        target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
+        requires-auth: true
+        timeout-ms: 10000
+      plans-service:
+        path-prefix: /api/v1/plans
+        target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
+        requires-auth: false
+        timeout-ms: 10000
       fleet-service:
         path-prefix: /api/v1/fleet
-        target-url: http://localhost:8083
+        target-url: ${FLEET_SERVICE_URL:http://localhost:8083}
         requires-auth: true
+        timeout-ms: 10000
+      work-order-service:
+        path-prefix: /api/v1/work-orders
+        target-url: ${WORK_ORDER_SERVICE_URL:http://localhost:8084}
+        requires-auth: true
+        timeout-ms: 10000
+      inventory-service:
+        path-prefix: /api/v1/inventory
+        target-url: ${INVENTORY_SERVICE_URL:http://localhost:8085}
+        requires-auth: true
+        timeout-ms: 10000
+      billing-service:
+        path-prefix: /api/v1/billing
+        target-url: ${BILLING_SERVICE_URL:http://localhost:8086}
+        requires-auth: true
+        timeout-ms: 10000
+      telemetry-service:
+        path-prefix: /api/v1/telemetry
+        target-url: ${TELEMETRY_SERVICE_URL:http://localhost:8087}
+        requires-auth: true
+        timeout-ms: 10000
