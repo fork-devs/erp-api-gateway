@@ -2,11 +2,15 @@ server:
   port: 8080
 
 spring:
+  profiles:
+    active: dev
   application:
     name: erp-api-gateway-test
 
 erp:
   gateway:
+    # El perfil de test es de desarrollo local: es el unico en el que la URL
+    # del conjunto de claves puede ir en claro.
     jwks-url: http://localhost:8081/.well-known/jwks.json
     tenant-service-url: http://localhost:8082
     default-timeout-ms: 5000

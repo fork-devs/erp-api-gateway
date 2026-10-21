@@ -17,6 +17,7 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -38,7 +39,9 @@ class NimbusJwtValidatorTest {
         this.publicKey = (RSAPublicKey) keyPair.getPublic();
 
         GatewayProperties properties = new GatewayProperties();
-        this.jwksKeyManager = new JwksKeyManager(properties);
+        // El perfil de desarrollo local es el unico que permite la URL en
+        // claro; el resto de las comprobaciones las hace el propio cliente.
+        this.jwksKeyManager = new JwksKeyManager(properties.getJwksUrl(), List.of("dev"));
         this.jwksKeyManager.registerManualKey(keyId, publicKey);
 
         this.validator = new NimbusJwtValidatorAdapter(jwksKeyManager);

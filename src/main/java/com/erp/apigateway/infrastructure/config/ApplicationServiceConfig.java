@@ -18,14 +18,17 @@ import com.erp.apigateway.infrastructure.security.NimbusJwtValidatorAdapter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 @Configuration
 @EnableConfigurationProperties(GatewayProperties.class)
 public class ApplicationServiceConfig {
 
     @Bean
-    public JwksKeyManager jwksKeyManager(GatewayProperties gatewayProperties) {
-        return new JwksKeyManager(gatewayProperties);
+    public JwksKeyManager jwksKeyManager(GatewayProperties gatewayProperties, Environment environment) {
+        return new JwksKeyManager(
+                gatewayProperties.getJwksUrl(),
+                java.util.Arrays.asList(environment.getActiveProfiles()));
     }
 
     @Bean
