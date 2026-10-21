@@ -43,7 +43,21 @@ public class GatewaySecurityService implements ValidateGatewayRequestUseCase {
             throw new InvalidTokenException("El token JWT ha expirado");
         }
 
-        // 2. Validar estado del inquilino (Tenant)
+        // 3. Comprobar el rol requerido por la ruta, ANTES de reenviar: una
+        // peticion con un rol insuficiente no debe llegar a tocar el servicio
+        // de destino.
+        if (target.requiredRole() != null && !target.requiredRole().isBlank()) {
+            String requerido = target.requiredRole().trim().toUpperCase();
+            boolean loTiene = claims.getRoles().stream()
+                    .map(String::toUpperCase)
+                    .anyMatch(rol -> rol.equals(requerido) || rol.equals("ROLE_" + requerido));
+            if (!loTiene) {
+                throw new TenantForbiddenException(
+                        "El principal no ostenta el rol requerido por la ruta: " + requerido);
+            }
+        }
+
+        // 4. Validar estado del inquilino (Tenant)
         TenantQuota quota = tenantQuotaPort.getQuota(claims.getTenantId(), token);
         if (quota != null && quota.isSuspended()) {
             throw new TenantForbiddenException("El taller inquilino se encuentra suspendido. Contacte al administrador.");

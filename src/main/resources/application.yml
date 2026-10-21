@@ -36,6 +36,16 @@ erp:
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: false
         timeout-ms: 10000
+      outbox-admin-service:
+        path-prefix: /api/v1/admin/outbox
+        target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
+        requires-auth: true
+        # Rol que el principal tiene que ostentar para usar la ruta. Se
+        # comprueba en el BORDE, antes de reenviar la peticion: una peticion
+        # con un rol insuficiente no llega siquiera a tocar el servicio de
+        # destino.
+        required-role: ADMIN_TALLER
+        timeout-ms: 10000
       fleet-service:
         path-prefix: /api/v1/fleet
         target-url: ${FLEET_SERVICE_URL:http://localhost:8083}

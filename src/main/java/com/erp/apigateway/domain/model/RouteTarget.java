@@ -6,8 +6,16 @@ public record RouteTarget(
         String serviceName,
         String targetBaseUrl,
         int timeoutMs,
-        boolean requiresAuth
+        boolean requiresAuth,
+        /**
+         * Rol que el principal tiene que ostentar para usar la ruta. Vacio
+         * significa que basta con estar autenticado.
+         */
+        String requiredRole
 ) implements Serializable {
+    public RouteTarget(String serviceName, String targetBaseUrl, int timeoutMs, boolean requiresAuth) {
+        this(serviceName, targetBaseUrl, timeoutMs, requiresAuth, null);
+    }
     public RouteTarget {
         if (serviceName == null || serviceName.trim().isEmpty()) {
             throw new IllegalArgumentException("serviceName no puede estar vacío");

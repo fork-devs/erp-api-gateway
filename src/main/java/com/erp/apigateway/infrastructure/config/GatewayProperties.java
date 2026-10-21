@@ -20,6 +20,15 @@ public class GatewayProperties {
         private String targetUrl;
         private boolean requiresAuth = true;
         private int timeoutMs = 10000;
+        /**
+         * Rol que el principal tiene que ostentar para usar la ruta. Vacio
+         * significa que basta con estar autenticado.
+         *
+         * <p>Comprobarlo en el BORDE, antes de reenviar, evita que una
+         * peticion con un rol insuficiente llegue siquiera a tocar el
+         * servicio de destino.
+         */
+        private String requiredRole;
 
         public ServiceRoute() {}
 
@@ -28,6 +37,14 @@ public class GatewayProperties {
             this.targetUrl = targetUrl;
             this.requiresAuth = requiresAuth;
             this.timeoutMs = timeoutMs;
+        }
+
+        public String getRequiredRole() {
+            return requiredRole;
+        }
+
+        public void setRequiredRole(String requiredRole) {
+            this.requiredRole = requiredRole;
         }
 
         public String getPathPrefix() {

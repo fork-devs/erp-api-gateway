@@ -145,7 +145,8 @@ public class GatewayDispatcherController {
             GatewayProperties.ServiceRoute route = entry.getValue();
             if (path.startsWith(route.getPathPrefix())) {
                 boolean requiresAuth = route.isRequiresAuth() && !isPublicEndpoint(path);
-                return new RouteTarget(entry.getKey(), route.getTargetUrl(), route.getTimeoutMs(), requiresAuth);
+                return new RouteTarget(entry.getKey(), route.getTargetUrl(), route.getTimeoutMs(), requiresAuth,
+                        route.getRequiredRole());
             }
         }
 
