@@ -33,6 +33,8 @@ class GatewaySecurityServiceTest {
     @Mock
     private TenantQuotaPort tenantQuotaPort;
 
+    private static final String TOKEN = "valid.jwt.token";
+
     private GatewaySecurityService securityService;
 
     @BeforeEach
@@ -82,7 +84,7 @@ class GatewaySecurityServiceTest {
         TenantQuota activeQuota = new TenantQuota(tenantId, "ACTIVE", "PRO", 500, 40);
 
         when(jwtValidatorPort.validate(validToken)).thenReturn(mockClaims);
-        when(tenantQuotaPort.getQuota(tenantId)).thenReturn(activeQuota);
+        when(tenantQuotaPort.getQuota(tenantId, TOKEN)).thenReturn(activeQuota);
 
         TokenClaims result = securityService.validateRequest(request, protectedTarget);
 
@@ -112,7 +114,7 @@ class GatewaySecurityServiceTest {
         TenantQuota suspendedQuota = new TenantQuota(tenantId, "SUSPENDED", "PRO", 500, 40);
 
         when(jwtValidatorPort.validate(validToken)).thenReturn(mockClaims);
-        when(tenantQuotaPort.getQuota(tenantId)).thenReturn(suspendedQuota);
+        when(tenantQuotaPort.getQuota(tenantId, TOKEN)).thenReturn(suspendedQuota);
 
         assertThrows(TenantForbiddenException.class, () -> securityService.validateRequest(request, protectedTarget));
     }

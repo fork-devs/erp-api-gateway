@@ -100,7 +100,7 @@ public class GatewayDispatcherController {
         // 2. Control de tráfico y concurrencia por taller (si está autenticado)
         UUID tenantId = claims != null ? claims.getTenantId() : null;
         if (tenantId != null) {
-            TenantQuota quota = tenantQuotaPort.getQuota(tenantId);
+            TenantQuota quota = tenantQuotaPort.getQuota(tenantId, bearerTokenOf(inboundRequest));
             executeRateLimitUseCase.evaluateRateLimit(tenantId, quota);
             executeBulkheadUseCase.acquireSlot(tenantId, quota.getMaxConcurrentSlots());
         }
@@ -175,6 +175,16 @@ public class GatewayDispatcherController {
             }
         }
         return false;
+    }
+
+    /** Token del llamante, tal cual lo envio, para reenviarlo al destino. */
+    private String bearerTokenOf(InboundRequest inboundRequest) {
+        String authHeader = inboundRequest.getFirstHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authHeader.substring(7).trim();
+        return token.isEmpty() ? null : token;
     }
 
     private String extractOrGenerateTraceId(HttpServletRequest request) {

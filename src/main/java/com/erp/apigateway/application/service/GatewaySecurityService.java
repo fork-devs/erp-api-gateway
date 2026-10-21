@@ -44,7 +44,7 @@ public class GatewaySecurityService implements ValidateGatewayRequestUseCase {
         }
 
         // 2. Validar estado del inquilino (Tenant)
-        TenantQuota quota = tenantQuotaPort.getQuota(claims.getTenantId());
+        TenantQuota quota = tenantQuotaPort.getQuota(claims.getTenantId(), token);
         if (quota != null && quota.isSuspended()) {
             throw new TenantForbiddenException("El taller inquilino se encuentra suspendido. Contacte al administrador.");
         }
