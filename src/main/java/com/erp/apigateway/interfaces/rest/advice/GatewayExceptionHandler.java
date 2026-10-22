@@ -5,6 +5,7 @@ import com.erp.apigateway.domain.exception.CircuitOpenException;
 import com.erp.apigateway.domain.exception.GatewayException;
 import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
 import com.erp.apigateway.domain.exception.InvalidTokenException;
+import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.RateLimitExceededException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
 import com.erp.apigateway.domain.exception.TenantForbiddenException;
@@ -100,6 +101,16 @@ public class GatewayExceptionHandler {
         problem.setProperty("errorCode", ex.getErrorCode());
         problem.setProperty("timestamp", Instant.now());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    @ExceptionHandler(PayloadTooLargeException.class)
+    public ResponseEntity<ProblemDetail> handlePayloadTooLarge(PayloadTooLargeException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE, ex.getMessage());
+        problem.setTitle("Cuerpo de la Petición Excedido");
+        problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/payload-too-large"));
+        problem.setProperty("errorCode", ex.getErrorCode());
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(problem);
     }
 
     @ExceptionHandler(CircuitOpenException.class)

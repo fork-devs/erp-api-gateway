@@ -4,6 +4,7 @@ import com.erp.apigateway.application.dto.OutboundRequest;
 import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.domain.exception.CircuitOpenException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
+import com.erp.apigateway.infrastructure.config.BodyLimits;
 import com.erp.apigateway.infrastructure.config.GatewayResilienceProperties;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -147,6 +148,38 @@ class HttpReverseProxyAdapterTest {
         Thread.sleep(700);
 
         assertThrows(TargetServiceUnavailableException.class, () -> adapter.forward(peticion(url, 500)));
+    }
+
+    @Test
+    @DisplayName("Should fail when the destination returns a body over the limit")
+    void debeFallarCuandoElDestinoDevuelveUnCuerpoQueExcedeElTope() throws IOException {
+        // Destino que devuelve un cuerpo mayor que el tope admitido.
+        HttpServer enorme = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        byte[] cuerpoGrande = new byte[4096];
+        enorme.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(200, cuerpoGrande.length);
+            try (OutputStream salida = exchange.getResponseBody()) {
+                salida.write(cuerpoGrande);
+            }
+        });
+        enorme.start();
+
+        try {
+            GatewayResilienceProperties propiedades = new GatewayResilienceProperties();
+            HttpReverseProxyAdapter limitado = new HttpReverseProxyAdapter(
+                    propiedades, new BodyLimits(1024, 1024));
+
+            String url = "http://127.0.0.1:" + enorme.getAddress().getPort() + "/api/v1/inventory";
+
+            // El borde no acumula el cuerpo entero: falla y lo reporta como
+            // fallo del destino, no como una respuesta truncada.
+            TargetServiceUnavailableException excepcion = assertThrows(
+                    TargetServiceUnavailableException.class, () -> limitado.forward(peticion(url, 500)));
+
+            assertThat(excepcion.getErrorCode()).isEqualTo("TARGET_SERVICE_UNAVAILABLE");
+        } finally {
+            enorme.stop(0);
+        }
     }
 
     private OutboundRequest peticion(String url, int timeoutMs) {

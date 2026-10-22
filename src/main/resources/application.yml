@@ -33,6 +33,11 @@ erp:
     jwks-url: ${JWKS_URL:https://auth.erp-automotriz.com/.well-known/jwks.json}
     tenant-service-url: ${TENANT_SERVICE_URL:http://localhost:8082}
     default-timeout-ms: ${DEFAULT_TIMEOUT_MS:10000}
+    # Topes del cuerpo, en bytes. El entrante va acompanado de la propiedad
+    # spring.codec.max-in-memory-size (que acota la memoria); el saliente lo
+    # acota el adaptador de reenvio, porque ninguna propiedad lo cubre.
+    max-inbound-body-bytes: ${MAX_INBOUND_BODY_BYTES:1048576}
+    max-outbound-body-bytes: ${MAX_OUTBOUND_BODY_BYTES:2097152}
     resilience:
       # Interruptor de circuito POR DESTINO: cuando un servicio deja de
       # responder, el borde deja de llamarlo en vez de esperar su timeout en

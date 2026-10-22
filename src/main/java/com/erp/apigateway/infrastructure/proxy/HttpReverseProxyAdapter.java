@@ -3,8 +3,10 @@ package com.erp.apigateway.infrastructure.proxy;
 import com.erp.apigateway.application.dto.OutboundRequest;
 import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.domain.exception.CircuitOpenException;
+import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
+import com.erp.apigateway.infrastructure.config.BodyLimits;
 import com.erp.apigateway.infrastructure.config.GatewayResilienceProperties;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -15,6 +17,8 @@ import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -44,6 +48,7 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
     private final CircuitBreakerRegistry circuitBreakers;
     private final Map<String, TimeLimiter> timeLimiters;
     private final GatewayResilienceProperties resilienceProperties;
+    private final BodyLimits bodyLimits;
     /**
      * El interruptor de tiempo ejecuta la llamada bloqueante en un hilo
      * virtual: el portador se libera mientras espera, que es justo lo que
@@ -52,7 +57,12 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
     private final ExecutorService executor;
 
     public HttpReverseProxyAdapter(GatewayResilienceProperties resilienceProperties) {
+        this(resilienceProperties, BodyLimits.porDefecto());
+    }
+
+    public HttpReverseProxyAdapter(GatewayResilienceProperties resilienceProperties, BodyLimits bodyLimits) {
         this.resilienceProperties = resilienceProperties;
+        this.bodyLimits = bodyLimits;
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(5))
@@ -66,11 +76,13 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
     public HttpReverseProxyAdapter(
             HttpClient httpClient,
             GatewayResilienceProperties resilienceProperties,
+            BodyLimits bodyLimits,
             CircuitBreakerRegistry circuitBreakers,
             Map<String, TimeLimiter> timeLimiters,
             ExecutorService executor) {
         this.httpClient = httpClient;
         this.resilienceProperties = resilienceProperties;
+        this.bodyLimits = bodyLimits;
         this.circuitBreakers = circuitBreakers;
         this.timeLimiters = timeLimiters;
         this.executor = executor;
@@ -145,12 +157,16 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
             HttpRequest httpRequest = builder.build();
             log.debug("Despachando proxy {} hacia {}", httpRequest.method(), httpRequest.uri());
 
-            HttpResponse<byte[]> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofByteArray());
+            // La respuesta se lee como FLUJO y con TOPE: con
+            // BodyHandlers.ofByteArray() el cuerpo entero del destino queda
+            // acumulado en la heap del borde, sin limite (hallazgo 6.33).
+            HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+            byte[] cuerpo = leerConTope(response.body(), bodyLimits.outboundBytes());
 
             return new ProxyResponse(
                     response.statusCode(),
                     response.headers().map(),
-                    response.body() != null ? response.body() : new byte[0]
+                    cuerpo
             );
 
         } catch (InterruptedException e) {
@@ -159,6 +175,32 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
         } catch (Exception e) {
             log.error("Error al comunicar con servicio downstream ({}): {}", request.targetUrl(), e.getMessage());
             throw new TargetServiceUnavailableException("El microservicio destino no está disponible o timeout (" + request.targetUrl() + ")", e);
+        }
+    }
+
+    /**
+     * Lee el cuerpo de la respuesta con un tope de bytes.
+     *
+     * <p>Si el destino devuelve mas de lo que el borde admite, la lectura
+     * falla y el reenvio se reporta como fallo del destino: el borde NO
+     * trunca en silencio una respuesta, porque un cliente que recibe media
+     * respuesta sin saberlo es peor que un error.
+     */
+    private byte[] leerConTope(InputStream flujo, int maxBytes) throws IOException {
+        if (flujo == null) {
+            return new byte[0];
+        }
+        try (InputStream entrada = flujo) {
+            byte[] buffer = new byte[8192];
+            java.io.ByteArrayOutputStream acumulado = new java.io.ByteArrayOutputStream();
+            int leidos;
+            while ((leidos = entrada.read(buffer)) != -1) {
+                if (acumulado.size() + leidos > maxBytes) {
+                    throw new IOException("La respuesta del servicio destino excede el tope de " + maxBytes + " bytes");
+                }
+                acumulado.write(buffer, 0, leidos);
+            }
+            return acumulado.toByteArray();
         }
     }
 

@@ -15,6 +15,15 @@ public class GatewayProperties {
     private int defaultTimeoutMs = 10000;
     private Map<String, ServiceRoute> routes = new HashMap<>();
 
+    /**
+     * Topes del cuerpo, en bytes. El entrante acota la memoria del borde (y
+     * lo acompaña la propiedad spring.codec.max-in-memory-size); el saliente
+     * lo acota el adaptador de reenvio, porque ninguna propiedad lo cubre
+     * (hallazgo 6.33).
+     */
+    private int maxInboundBodyBytes = BodyLimits.DEFAULT_INBOUND_BYTES;
+    private int maxOutboundBodyBytes = BodyLimits.DEFAULT_OUTBOUND_BYTES;
+
     public static class ServiceRoute {
         private String pathPrefix;
         private String targetUrl;
@@ -128,5 +137,25 @@ public class GatewayProperties {
 
     public void setRoutes(Map<String, ServiceRoute> routes) {
         this.routes = routes;
+    }
+
+    public int getMaxInboundBodyBytes() {
+        return maxInboundBodyBytes;
+    }
+
+    public void setMaxInboundBodyBytes(int maxInboundBodyBytes) {
+        this.maxInboundBodyBytes = maxInboundBodyBytes;
+    }
+
+    public int getMaxOutboundBodyBytes() {
+        return maxOutboundBodyBytes;
+    }
+
+    public void setMaxOutboundBodyBytes(int maxOutboundBodyBytes) {
+        this.maxOutboundBodyBytes = maxOutboundBodyBytes;
+    }
+
+    public BodyLimits bodyLimits() {
+        return new BodyLimits(maxInboundBodyBytes, maxOutboundBodyBytes);
     }
 }

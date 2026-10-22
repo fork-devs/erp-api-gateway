@@ -59,8 +59,10 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public ReverseProxyPort reverseProxyPort(GatewayResilienceProperties resilienceProperties) {
-        return new HttpReverseProxyAdapter(resilienceProperties);
+    public ReverseProxyPort reverseProxyPort(
+            GatewayProperties gatewayProperties,
+            GatewayResilienceProperties resilienceProperties) {
+        return new HttpReverseProxyAdapter(resilienceProperties, gatewayProperties.bodyLimits());
     }
 
     @Bean

@@ -6,6 +6,7 @@ import com.erp.apigateway.application.usecase.ExecuteBulkheadUseCase;
 import com.erp.apigateway.application.usecase.ExecuteRateLimitUseCase;
 import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
 import com.erp.apigateway.application.usecase.ValidateGatewayRequestUseCase;
+import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
 import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.TenantQuota;
@@ -87,6 +88,15 @@ public class GatewayDispatcherController {
         String method = request.getMethod();
         String queryString = request.getQueryString();
         String traceId = extractOrGenerateTraceId(request);
+
+        // El tope del cuerpo ENTRANTE: un cuerpo grande no debe llegar al
+        // servicio de destino, ni ocupar la heap del borde mas alla de lo que
+        // el codec ya ha acumulado (hallazgo 6.33).
+        if (body != null && body.length > gatewayProperties.getMaxInboundBodyBytes()) {
+            throw new PayloadTooLargeException(
+                    "El cuerpo de la peticion excede el maximo admitido por la pasarela ("
+                            + gatewayProperties.getMaxInboundBodyBytes() + " bytes)");
+        }
 
         RouteTarget target = resolveTarget(path);
         if (target == null) {
