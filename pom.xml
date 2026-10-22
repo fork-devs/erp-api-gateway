@@ -20,6 +20,8 @@
         <springdoc.version>2.6.0</springdoc.version>
         <nimbus-jose-jwt.version>9.40</nimbus-jose-jwt.version>
         <caffeine.version>3.1.8</caffeine.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
+        <jacoco.version>0.8.15</jacoco.version>
     </properties>
 
     <dependencies>
@@ -39,6 +41,18 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+            Interruptor de circuito y de tiempo, POR DESTINO, en el puerto de
+            reenvio. Se usa Resilience4j a pelo y NO Spring Cloud: el gateway
+            no tiene ni una dependencia de Spring Cloud (ADR-006) y no las
+            necesita para aislar fallos.
+        -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot4</artifactId>
+            <version>${resilience4j.version}</version>
         </dependency>
 
         <!-- JWT and Caching -->
@@ -91,6 +105,83 @@
                 <configuration>
                     <release>21</release>
                 </configuration>
+            </plugin>
+            <!--
+                Java 21 es un REQUISITO, no una preferencia: la activacion de
+                los hilos virtuales es silenciosa en una JVM anterior, y el
+                techo de concurrencia del borde volveria a ser el numero de
+                hilos de plataforma sin que nada avise.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>exigir-java-21</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                    <message>El gateway requiere Java 21 o superior: los hilos virtuales son la base del modelo de concurrencia.</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <!--
+                                    La cobertura minima del 80% se mide en la
+                                    capa de DOMINIO: es la capa donde viven las
+                                    reglas del negocio, y la que no depende de
+                                    que la infraestructura este en su sitio.
+                                -->
+                                <rule>
+                                    <element>PACKAGE</element>
+                                    <includes>
+                                        <include>com.erp.apigateway.domain.*</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.80</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

@@ -6,6 +6,24 @@ server:
 spring:
   application:
     name: erp-api-gateway
+  threads:
+    # El techo de concurrencia del borde NO lo pone la CPU: lo ponen los
+    # hilos de plataforma. Con los hilos virtuales, el send() bloqueante
+    # libera el portador mientras espera, y el borde escala a miles de
+    # peticiones concurrentes sin cambiar el modelo de programacion.
+    # Requiere Java 21 (el enforcer del pom lo exige).
+    virtual:
+      enabled: true
+  codec:
+    # Tope del cuerpo ENTRANTE. El saliente lo acota el adaptador de reenvio,
+    # porque ninguna propiedad lo cubre: ver HttpReverseProxyAdapter.
+    max-in-memory-size: ${MAX_IN_MEMORY_SIZE:1MB}
+  http:
+    client:
+      # Timeouts del cliente HTTP auto-configurado (RestClient). Sin ellos, un
+      # servicio de destino colgado bloquea el hilo indefinidamente.
+      connect-timeout: ${HTTP_CLIENT_CONNECT_TIMEOUT:2s}
+      read-timeout: ${HTTP_CLIENT_READ_TIMEOUT:5s}
 
 erp:
   gateway:
