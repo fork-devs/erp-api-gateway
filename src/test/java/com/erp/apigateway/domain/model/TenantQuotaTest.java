@@ -44,25 +44,29 @@ class TenantQuotaTest {
     }
 
     @Test
-    void losLimitesNoValidosSeSustituyenPorLosDelPlan() {
+    void losLimitesNoValidosSeSustituyenPorElDelPlanMasBajo() {
         TenantQuota cuota = new TenantQuota(TALLER, "ACTIVE", "ENTERPRISE", 0, -1);
 
-        assertThat(cuota.getMaxReqPerMin()).isEqualTo(2000);
-        assertThat(cuota.getMaxConcurrentSlots()).isEqualTo(100);
+        assertThat(cuota.getMaxReqPerMin()).isEqualTo(TenantQuota.LIMITE_POR_DEFECTO_POR_MINUTO);
+        assertThat(cuota.getMaxConcurrentSlots()).isEqualTo(TenantQuota.LIMITE_POR_DEFECTO_CONCURRENTES);
     }
 
     @Test
-    void laCuotaPorDefectoEsLaDelPlanIndicado() {
+    void laCuotaPorDefectoEsLaDelPlanMasBajo() {
+        // El gateway NO deduce los limites del plan: los posee el
+        // tenant-service (ADR-007). La cuota por defecto es el suelo, y el
+        // plan solo se conserva para trazabilidad.
         TenantQuota basico = TenantQuota.createDefault(TALLER, "BASICO");
         TenantQuota pro = TenantQuota.createDefault(TALLER, "PRO");
         TenantQuota enterprise = TenantQuota.createDefault(TALLER, "ENTERPRISE");
 
         assertThat(basico.getMaxReqPerMin()).isEqualTo(100);
         assertThat(basico.getMaxConcurrentSlots()).isEqualTo(15);
-        assertThat(pro.getMaxReqPerMin()).isEqualTo(500);
-        assertThat(pro.getMaxConcurrentSlots()).isEqualTo(40);
-        assertThat(enterprise.getMaxReqPerMin()).isEqualTo(2000);
-        assertThat(enterprise.getMaxConcurrentSlots()).isEqualTo(100);
+        assertThat(pro.getMaxReqPerMin()).isEqualTo(100);
+        assertThat(pro.getMaxConcurrentSlots()).isEqualTo(15);
+        assertThat(enterprise.getMaxReqPerMin()).isEqualTo(100);
+        assertThat(enterprise.getMaxConcurrentSlots()).isEqualTo(15);
+        assertThat(pro.getPlanCode()).isEqualTo("PRO");
     }
 
     @Test

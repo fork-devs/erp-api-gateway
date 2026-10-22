@@ -18,6 +18,14 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
 
     private static final Logger log = LoggerFactory.getLogger(TenantServiceClientAdapter.class);
 
+    /**
+     * Limite de trafico por defecto: el del plan MAS BASICO. Se usa cuando el
+     * tenant-service no ha enviado los limites del plan (ADR-007). Es el mas
+     * bajo a proposito: caer hacia abajo nunca entrega mas de lo prometido.
+     */
+    static final int LIMITE_POR_DEFECTO_POR_MINUTO = 100;
+    static final int LIMITE_POR_DEFECTO_CONCURRENTES = 15;
+
     private final GatewayProperties gatewayProperties;
     private final RestClient restClient;
     private final Cache<UUID, TenantQuota> quotaCache;
@@ -77,8 +85,8 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
                         dto.tenantId() != null ? dto.tenantId() : tenantId,
                         dto.status(),
                         dto.planCode(),
-                        resolveMaxReqPerMin(dto.planCode()),
-                        resolveMaxConcurrentSlots(dto.planCode())
+                        limiteDeTrafico(dto.maxRequestsPerMinute(), LIMITE_POR_DEFECTO_POR_MINUTO),
+                        limiteDeTrafico(dto.maxConcurrentSlots(), LIMITE_POR_DEFECTO_CONCURRENTES)
                 );
             }
         } catch (Exception e) {
@@ -88,21 +96,19 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
         return TenantQuota.createDefault(tenantId, "BASICO");
     }
 
-    private int resolveMaxReqPerMin(String planCode) {
-        if (planCode == null) return 100;
-        return switch (planCode.toUpperCase()) {
-            case "ENTERPRISE" -> 2000;
-            case "PRO" -> 500;
-            default -> 100;
-        };
-    }
-
-    private int resolveMaxConcurrentSlots(String planCode) {
-        if (planCode == null) return 15;
-        return switch (planCode.toUpperCase()) {
-            case "ENTERPRISE" -> 100;
-            case "PRO" -> 40;
-            default -> 15;
-        };
+    /**
+     * El limite de trafico lo posee el tenant-service, que es el dueno del
+     * plan (ADR-007). Aqui NO se deduce del codigo de plan: se usa el que
+     * llega, y si no llega se cae al MAS BAJO.
+     *
+     * <p>Caer hacia abajo y nunca hacia arriba es deliberado: un despliegue
+     * desordenado, en el que el gateway va por delante del tenant-service, no
+     * puede PROMETER mas de lo que el plan permite.
+     */
+    private int limiteDeTrafico(Integer limiteDelPlan, int limitePorDefecto) {
+        if (limiteDelPlan == null || limiteDelPlan <= 0) {
+            return limitePorDefecto;
+        }
+        return limiteDelPlan;
     }
 }
