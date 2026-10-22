@@ -41,29 +41,36 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
     }
 
     @Override
-    public TenantQuota getQuota(UUID tenantId) {
+    public TenantQuota getQuota(UUID tenantId, String callerToken) {
         if (tenantId == null) {
             return TenantQuota.createDefault(UUID.randomUUID(), "BASICO");
         }
 
-        return quotaCache.get(tenantId, this::fetchQuotaFromService);
+        return quotaCache.get(tenantId, key -> fetchQuotaFromService(key, callerToken));
     }
 
     public void putCache(UUID tenantId, TenantQuota quota) {
         quotaCache.put(tenantId, quota);
     }
 
-    private TenantQuota fetchQuotaFromService(UUID tenantId) {
+    private TenantQuota fetchQuotaFromService(UUID tenantId, String callerToken) {
         String baseUrl = gatewayProperties.getTenantServiceUrl();
         String url = baseUrl + "/api/v1/internal/tenants/" + tenantId + "/limits";
 
         try {
             log.debug("Consultando cuota y estado del tenant {} en {}", tenantId, url);
-            TenantLimitsDto dto = restClient.get()
+            org.springframework.web.client.RestClient.RequestHeadersSpec<?> spec = restClient.get()
                     .uri(url)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .body(TenantLimitsDto.class);
+                    .accept(MediaType.APPLICATION_JSON);
+
+            // El token del llamante se reenvia: el servicio de tenants deriva
+            // el taller de la peticion del token verificado, de modo que una
+            // consulta sin token no podria resolver el taller.
+            if (callerToken != null && !callerToken.isBlank()) {
+                spec = spec.header("Authorization", "Bearer " + callerToken);
+            }
+
+            TenantLimitsDto dto = spec.retrieve().body(TenantLimitsDto.class);
 
             if (dto != null) {
                 return new TenantQuota(
