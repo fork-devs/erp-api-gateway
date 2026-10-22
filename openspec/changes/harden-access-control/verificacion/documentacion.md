@@ -3,10 +3,15 @@
 > La documentación vive en la **raíz del workspace**, que no es un repositorio
 > Git: `docs/` no está versionado. Este archivo deja constancia de lo
 > actualizado, para que el cambio sea trazable desde el repositorio.
+>
+> Los ADR son la excepción: su **copia canónica** vive en el repositorio del
+> servicio que decide (ADR-001 en `erp-auth-service`, ADR-002 en
+> `erp-integration-hub`), y los demás repositorios guardan un espejo con el
+> puntero a ella.
 
 ## Task 7.1 — El ADR del diferimiento
 
-**Fichero:** `docs/adr/ADR-001-diferir-migracion-spring-authorization-server.md`
+**Fichero:** `docs/adr/ADR-001-diferir-migracion-spring-authorization-server.md` — espejo; la **copia canónica** está en `erp-auth-service/docs/adr/ADR-001-diferir-migracion-spring-authorization-server.md`.
 
 El registro sigue la convención del proyecto (escenario medible, táctica,
 patrón y alternativa descartada) y contiene:

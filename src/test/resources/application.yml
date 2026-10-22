@@ -39,7 +39,8 @@ erp:
         path-prefix: /api/v1/fleet
         target-url: ${FLEET_SERVICE_URL:http://localhost:8083}
         requires-auth: true
-        timeout-ms: 10000
+        # El plazo que fija el spec para las comunicaciones internas.
+        timeout-ms: 500
       work-order-service:
         path-prefix: /api/v1/work-orders
         target-url: ${WORK_ORDER_SERVICE_URL:http://localhost:8084}

@@ -50,7 +50,14 @@ erp:
         path-prefix: /api/v1/fleet
         target-url: ${FLEET_SERVICE_URL:http://localhost:8083}
         requires-auth: true
-        timeout-ms: 10000
+        # El plazo que fija el spec para las comunicaciones internas. Con la
+        # validacion asincrona, la ruta solo hace trabajo de base de datos.
+        #
+        # No se declara required-role en el BORDE: el prefijo mezcla lecturas
+        # y escrituras, y el rol depende de la operacion —leer admite tambien
+        # al MECANICO, escribir no—. El filtro fino lo aplica el servicio de
+        # destino, que es quien distingue las operaciones.
+        timeout-ms: 500
       work-order-service:
         path-prefix: /api/v1/work-orders
         target-url: ${WORK_ORDER_SERVICE_URL:http://localhost:8084}

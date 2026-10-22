@@ -6,12 +6,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.core.io.ClassPathResource;
+import org.yaml.snakeyaml.Yaml;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,6 +96,42 @@ class GatewayRouteTableTest {
                 "El registro de usuarios no es una operacion publica: exige autenticacion");
     }
 
+    @Test
+    @DisplayName("La ruta de fleet apunta al servicio de fleet, con el plazo del spec")
+    void laRutaDeFleetApuntaAlServicioDeFleet() {
+        Map<String, Object> rutas = rutasDelYaml();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> fleet = (Map<String, Object>) rutas.get("fleet-service");
+
+        assertNotNull(fleet, "La tabla de rutas debe incluir /api/v1/fleet");
+        assertEquals("/api/v1/fleet", fleet.get("path-prefix"),
+                "El prefijo del gateway es la ruta del servicio: el servicio lo publica bajo ese prefijo");
+        assertTrue(String.valueOf(fleet.get("target-url")).contains("8083"),
+                "El servicio de fleet escucha en el 8083: " + fleet.get("target-url"));
+        assertEquals(Boolean.TRUE, fleet.get("requires-auth"),
+                "La gestion de clientes y vehiculos exige autenticacion");
+        assertEquals(500, fleet.get("timeout-ms"),
+                "El plazo de las comunicaciones internas es de 500 ms");
+    }
+
+    /**
+     * Rutas del gateway leidas del YAML de configuracion.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> rutasDelYaml() {
+        Yaml yaml = new Yaml();
+        Map<String, Object> raiz;
+        try (java.io.InputStream entrada = new ClassPathResource("application.yml").getInputStream()) {
+            raiz = yaml.load(entrada);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("No se pudo leer la configuracion del gateway", e);
+        }
+        Map<String, Object> erp = (Map<String, Object>) raiz.get("erp");
+        Map<String, Object> gateway = (Map<String, Object>) erp.get("gateway");
+        return (Map<String, Object>) gateway.get("routes");
+    }
+
     /**
      * Ruta que sirve una operacion: la de prefijo mas largo que encaja. La
      * de prefijo exacto es un caso particular.
@@ -135,6 +173,8 @@ class GatewayRouteTableTest {
                 case "target-url" -> ruta.setTargetUrl(yaml.getObject().getProperty(nombre));
                 case "requires-auth" -> ruta.setRequiresAuth(
                         Boolean.parseBoolean(yaml.getObject().getProperty(nombre)));
+                case "timeout-ms" -> ruta.setTimeoutMs(
+                        Integer.parseInt(yaml.getObject().getProperty(nombre)));
                 default -> {
                     // El resto de atributos no forman parte de la comprobacion.
                 }
