@@ -1,6 +1,7 @@
 package com.erp.apigateway.interfaces.rest.advice;
 
 import com.erp.apigateway.domain.exception.BulkheadExceededException;
+import com.erp.apigateway.domain.exception.CircuitOpenException;
 import com.erp.apigateway.domain.exception.GatewayException;
 import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
 import com.erp.apigateway.domain.exception.InvalidTokenException;
@@ -99,6 +100,23 @@ public class GatewayExceptionHandler {
         problem.setProperty("errorCode", ex.getErrorCode());
         problem.setProperty("timestamp", Instant.now());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    @ExceptionHandler(CircuitOpenException.class)
+    public ResponseEntity<ProblemDetail> handleCircuitOpen(CircuitOpenException ex) {
+        // El circuito del destino esta abierto: no se le llama. No es lo mismo
+        // que un fallo durante la llamada, y el cliente lo distingue por el
+        // codigo de error y por el Retry-After (hallazgo 6.57).
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("Servicio Destino no Disponible Temporalmente");
+        problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/circuit-open"));
+        problem.setProperty("errorCode", ex.getErrorCode());
+        problem.setProperty("timestamp", Instant.now());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "5");
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).headers(headers).body(problem);
     }
 
     @ExceptionHandler(TargetServiceUnavailableException.class)

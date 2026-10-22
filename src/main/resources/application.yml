@@ -33,6 +33,21 @@ erp:
     jwks-url: ${JWKS_URL:https://auth.erp-automotriz.com/.well-known/jwks.json}
     tenant-service-url: ${TENANT_SERVICE_URL:http://localhost:8082}
     default-timeout-ms: ${DEFAULT_TIMEOUT_MS:10000}
+    resilience:
+      # Interruptor de circuito POR DESTINO: cuando un servicio deja de
+      # responder, el borde deja de llamarlo en vez de esperar su timeout en
+      # cada peticion (hallazgo 6.57).
+      circuit-breaker:
+        defaults:
+          failure-rate-threshold: 50
+          minimum-number-of-calls: 5
+          sliding-window-size: 10
+          wait-duration-in-open-state: 30s
+          permitted-number-of-calls-in-half-open-state: 2
+        destinations: {}
+      # Margen del interruptor de tiempo sobre el plazo de la ruta.
+      time-limiter:
+        margin: 250ms
     routes:
       auth-service:
         path-prefix: /api/v1/auth

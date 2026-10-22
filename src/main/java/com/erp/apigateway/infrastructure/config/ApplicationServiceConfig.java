@@ -23,7 +23,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.web.client.RestClient;
 
 @Configuration
-@EnableConfigurationProperties(GatewayProperties.class)
+@EnableConfigurationProperties({GatewayProperties.class, GatewayResilienceProperties.class})
 public class ApplicationServiceConfig {
 
     @Bean
@@ -59,8 +59,8 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public ReverseProxyPort reverseProxyPort() {
-        return new HttpReverseProxyAdapter();
+    public ReverseProxyPort reverseProxyPort(GatewayResilienceProperties resilienceProperties) {
+        return new HttpReverseProxyAdapter(resilienceProperties);
     }
 
     @Bean

@@ -2,8 +2,16 @@ package com.erp.apigateway.infrastructure.proxy;
 
 import com.erp.apigateway.application.dto.OutboundRequest;
 import com.erp.apigateway.application.dto.ProxyResponse;
+import com.erp.apigateway.domain.exception.CircuitOpenException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
+import com.erp.apigateway.infrastructure.config.GatewayResilienceProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.timelimiter.TimeLimiter;
+import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +23,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 
 public class HttpReverseProxyAdapter implements ReverseProxyPort {
 
@@ -28,21 +41,77 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
     );
 
     private final HttpClient httpClient;
+    private final CircuitBreakerRegistry circuitBreakers;
+    private final Map<String, TimeLimiter> timeLimiters;
+    private final GatewayResilienceProperties resilienceProperties;
+    /**
+     * El interruptor de tiempo ejecuta la llamada bloqueante en un hilo
+     * virtual: el portador se libera mientras espera, que es justo lo que
+     * hace que el borde escale.
+     */
+    private final ExecutorService executor;
 
-    public HttpReverseProxyAdapter() {
+    public HttpReverseProxyAdapter(GatewayResilienceProperties resilienceProperties) {
+        this.resilienceProperties = resilienceProperties;
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
+        this.circuitBreakers = CircuitBreakerRegistry.ofDefaults();
+        this.timeLimiters = new ConcurrentHashMap<>();
+        this.executor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
-    public HttpReverseProxyAdapter(HttpClient httpClient) {
+    public HttpReverseProxyAdapter(
+            HttpClient httpClient,
+            GatewayResilienceProperties resilienceProperties,
+            CircuitBreakerRegistry circuitBreakers,
+            Map<String, TimeLimiter> timeLimiters,
+            ExecutorService executor) {
         this.httpClient = httpClient;
+        this.resilienceProperties = resilienceProperties;
+        this.circuitBreakers = circuitBreakers;
+        this.timeLimiters = timeLimiters;
+        this.executor = executor;
     }
 
     @Override
     public ProxyResponse forward(OutboundRequest request) {
+        String destino = destinoDe(request.targetUrl());
+        CircuitBreaker interruptor = circuitBreakers.circuitBreaker(destino, () -> configuracionDelCircuito(destino));
+        String clave = destino + "@" + request.timeoutMs();
+        TimeLimiter limitador = timeLimiters.computeIfAbsent(clave, this::crearInterruptorDeTiempo);
+
+        try {
+            return limitador.executeFutureSupplier(() -> CompletableFuture.supplyAsync(
+                    () -> interruptor.executeSupplier(() -> enviar(request)),
+                    executor));
+        } catch (CallNotPermittedException ex) {
+            // El circuito esta abierto: el destino no se llama.
+            log.warn("Circuito abierto para el destino {}: no se reenvia la peticion", destino);
+            throw new CircuitOpenException(
+                    "El servicio destino no esta disponible temporalmente: " + destino);
+        } catch (TimeoutException ex) {
+            log.warn("Se excedio el plazo del interruptor de tiempo para el destino {}", destino);
+            throw new TargetServiceUnavailableException(
+                    "El microservicio destino excedio su plazo (" + request.targetUrl() + ")", ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new TargetServiceUnavailableException(
+                    "Peticion interrumpida al comunicar con servicio destino: " + request.targetUrl(), ex);
+        } catch (Exception e) {
+            log.error("Error al comunicar con servicio downstream ({}): {}", request.targetUrl(), e.getMessage());
+            throw new TargetServiceUnavailableException(
+                    "El microservicio destino no esta disponible o timeout (" + request.targetUrl() + ")", e);
+        }
+    }
+
+    /**
+     * La llamada real al destino. Es bloqueante a proposito: con hilos
+     * virtuales, el puerto de plataforma se libera mientras espera.
+     */
+    private ProxyResponse enviar(OutboundRequest request) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(request.targetUrl()))
@@ -90,6 +159,59 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
         } catch (Exception e) {
             log.error("Error al comunicar con servicio downstream ({}): {}", request.targetUrl(), e.getMessage());
             throw new TargetServiceUnavailableException("El microservicio destino no está disponible o timeout (" + request.targetUrl() + ")", e);
+        }
+    }
+
+    /**
+     * Configuracion del interruptor por DESTINO. Cada destino tiene el suyo:
+     * un destino caido no puede abrir el circuito de los demas.
+     */
+    private CircuitBreakerConfig configuracionDelCircuito(String destino) {
+        GatewayResilienceProperties.Settings ajustes =
+                resilienceProperties.getCircuitBreaker().paraDestino(destino);
+
+        return CircuitBreakerConfig.custom()
+                .failureRateThreshold(ajustes.getFailureRateThreshold())
+                .minimumNumberOfCalls(ajustes.getMinimumNumberOfCalls())
+                .slidingWindowSize(ajustes.getSlidingWindowSize())
+                .waitDurationInOpenState(ajustes.getWaitDurationInOpenState())
+                .permittedNumberOfCallsInHalfOpenState(ajustes.getPermittedNumberOfCallsInHalfOpenState())
+                .build();
+    }
+
+    private TimeLimiterConfig configuracionDelInterruptorDeTiempo(String clave) {
+        return TimeLimiterConfig.custom()
+                .timeoutDuration(plazoDeLaRuta(clave))
+                .cancelRunningFuture(true)
+                .build();
+    }
+
+    private TimeLimiter crearInterruptorDeTiempo(String clave) {
+        return TimeLimiter.of(clave, configuracionDelInterruptorDeTiempo(clave));
+    }
+
+    /**
+     * El plazo del interruptor de tiempo es el de la ruta mas un margen: el
+     * plazo de la ruta lo aplica el cliente HTTP, y este es el red que
+     * impide que la llamada bloqueada lo exceda.
+     */
+    private Duration plazoDeLaRuta(String clave) {
+        int indice = clave.lastIndexOf('@');
+        int timeoutMs = indice > 0 ? Integer.parseInt(clave.substring(indice + 1)) : 10000;
+        return Duration.ofMillis(timeoutMs).plus(resilienceProperties.getTimeLimiter().getMargin());
+    }
+
+    /**
+     * Identificador del destino: host y puerto. Es la granularidad correcta
+     * para un circuito: dos rutas al mismo servicio comparten destino.
+     */
+    private String destinoDe(String targetUrl) {
+        try {
+            URI uri = URI.create(targetUrl);
+            int puerto = uri.getPort() > 0 ? uri.getPort() : (uri.getScheme() != null && uri.getScheme().equals("https") ? 443 : 80);
+            return uri.getHost() + ":" + puerto;
+        } catch (RuntimeException ex) {
+            return targetUrl;
         }
     }
 }
