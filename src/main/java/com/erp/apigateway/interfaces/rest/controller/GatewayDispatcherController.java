@@ -1,6 +1,7 @@
 package com.erp.apigateway.interfaces.rest.controller;
 
 import com.erp.apigateway.application.dto.InboundRequest;
+import com.erp.apigateway.application.logging.AccessEventLogger;
 import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.application.usecase.ExecuteBulkheadUseCase;
 import com.erp.apigateway.application.usecase.ExecuteRateLimitUseCase;
@@ -8,11 +9,13 @@ import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
 import com.erp.apigateway.application.usecase.ValidateGatewayRequestUseCase;
 import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
+import com.erp.apigateway.domain.model.RateLimitResult;
 import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.TenantQuota;
 import com.erp.apigateway.domain.model.TokenClaims;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.config.GatewayProperties;
+import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.Duration;
 import java.util.UUID;
 
 @RestController
@@ -62,9 +66,11 @@ public class GatewayDispatcherController {
     private final ExecuteBulkheadUseCase executeBulkheadUseCase;
     private final RouteGatewayRequestUseCase routeGatewayRequestUseCase;
     private final TenantQuotaPort tenantQuotaPort;
+    private final GatewayMetrics gatewayMetrics;
 
     public GatewayDispatcherController(
             GatewayProperties gatewayProperties,
+            GatewayMetrics gatewayMetrics,
             ValidateGatewayRequestUseCase validateGatewayRequestUseCase,
             ExecuteRateLimitUseCase executeRateLimitUseCase,
             ExecuteBulkheadUseCase executeBulkheadUseCase,
@@ -76,6 +82,7 @@ public class GatewayDispatcherController {
         this.executeBulkheadUseCase = executeBulkheadUseCase;
         this.routeGatewayRequestUseCase = routeGatewayRequestUseCase;
         this.tenantQuotaPort = tenantQuotaPort;
+        this.gatewayMetrics = gatewayMetrics;
     }
 
     @RequestMapping(value = {"/api/v1/**", "/.well-known/**"})
@@ -118,12 +125,14 @@ public class GatewayDispatcherController {
 
         // 2. Control de tráfico y concurrencia por taller (si está autenticado)
         UUID tenantId = claims != null ? claims.getTenantId() : null;
+        RateLimitResult cuota = null;
         if (tenantId != null) {
             TenantQuota quota = tenantQuotaPort.getQuota(tenantId, bearerTokenOf(inboundRequest));
-            executeRateLimitUseCase.evaluateRateLimit(tenantId, quota);
+            cuota = executeRateLimitUseCase.evaluateRateLimit(tenantId, quota);
             executeBulkheadUseCase.acquireSlot(tenantId, quota.getMaxConcurrentSlots());
         }
 
+        long inicio = System.nanoTime();
         try {
             // 3. Enrutar y despachar petición al microservicio destino
             ProxyResponse proxyResponse = routeGatewayRequestUseCase.route(inboundRequest, target, claims, traceId);
@@ -137,6 +146,22 @@ public class GatewayDispatcherController {
                 }
             }
             responseHeaders.set("X-Trace-ID", traceId);
+
+            // 5. Cabeceras de cuota: el cliente tiene que saber cuanto le
+            // queda y cuando puede reintentar (hallazgo 6.35).
+            if (cuota != null) {
+                responseHeaders.set("X-RateLimit-Limit", String.valueOf(cuota.limit()));
+                responseHeaders.set("X-RateLimit-Remaining", String.valueOf(cuota.remainingTokens()));
+                responseHeaders.set("X-RateLimit-Reset", String.valueOf(cuota.resetAfterSeconds()));
+            }
+
+            long duracionMs = (System.nanoTime() - inicio) / 1_000_000L;
+            gatewayMetrics.peticionAtendida(target.serviceName(), target.serviceName(), method,
+                    proxyResponse.statusCode(), Duration.ofMillis(duracionMs));
+            AccessEventLogger.registrar(path, target.serviceName(), method, proxyResponse.statusCode(), duracionMs,
+                    tenantId != null ? tenantId.toString() : null,
+                    claims != null ? claims.getUserId().toString() : null,
+                    traceId);
 
             return ResponseEntity.status(proxyResponse.statusCode())
                     .headers(responseHeaders)
@@ -209,19 +234,34 @@ public class GatewayDispatcherController {
         return token.isEmpty() ? null : token;
     }
 
+    /**
+     * Identificador de traza de la peticion.
+     *
+     * <p>Siempre es un identificador W3C valido de 32 digitos hexadecimales:
+     * es lo que exige el formato {@code traceparent}, y lo que permite que el
+     * identificador de la cabecera {@code X-Trace-ID}, el de la traza y el
+     * del contexto propagado sean EL MISMO. Un valor de traza que no sea
+     * hexadecimal se descarta y se genera otro, porque un identificador
+     * invalido rompe la correlacion en el colector de trazas.
+     */
     private String extractOrGenerateTraceId(HttpServletRequest request) {
         String traceId = request.getHeader("X-Trace-ID");
-        if (traceId != null && !traceId.trim().isEmpty()) {
-            return traceId.trim();
+        if (traceId != null && esIdentificadorDeTrazaValido(traceId.trim())) {
+            return traceId.trim().toLowerCase();
         }
         String traceparent = request.getHeader("traceparent");
         if (traceparent != null && traceparent.startsWith("00-")) {
             String[] parts = traceparent.split("-");
-            if (parts.length >= 2 && !parts[1].isEmpty()) {
-                return parts[1];
+            if (parts.length >= 2 && esIdentificadorDeTrazaValido(parts[1])) {
+                return parts[1].toLowerCase();
             }
         }
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private boolean esIdentificadorDeTrazaValido(String valor) {
+        return valor.length() == 32
+                && valor.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
     }
 
     private Map<String, List<String>> extractHeaders(HttpServletRequest request) {

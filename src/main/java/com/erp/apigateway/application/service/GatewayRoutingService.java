@@ -70,9 +70,11 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
         String effectiveTraceId = (traceId != null && !traceId.trim().isEmpty()) ? traceId : UUID.randomUUID().toString().replace("-", "");
         outboundHeaders.put("X-Trace-ID", List.of(effectiveTraceId));
 
-        String w3cTraceId = formatTo32Hex(effectiveTraceId);
-        String spanId = formatTo16Hex(UUID.randomUUID().toString().replace("-", ""));
-        outboundHeaders.put("traceparent", List.of("00-" + w3cTraceId + "-" + spanId + "-01"));
+        // El contexto de traza del CLIENTE se CONTINUA, no se inventa: si el
+        // gateway fabrica un traceparent, la traza del borde y la de los
+        // servicios de destino quedan desconectadas y ningun span respalda
+        // ese identificador (hallazgo 6.39).
+        outboundHeaders.put("traceparent", List.of(continuarTraceparent(inboundRequest, effectiveTraceId)));
 
         // 3. Propagar identidad multi-inquilino si el token está presente
         if (claims != null) {
@@ -125,6 +127,36 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
         }
     }
 
+    /**
+     * Continua el contexto de traza W3C del cliente.
+     *
+     * <p>El formato es {@code version-traceId(32 hex)-spanId(16 hex)-flags}.
+     * Si el cliente no manda uno valido, se genera uno propio: en ese caso
+     * el identificador de traza es el del gateway.
+     */
+    private String continuarTraceparent(InboundRequest inboundRequest, String traceIdDelGateway) {
+        String traceparent = inboundRequest.getFirstHeader("traceparent");
+        if (traceparent != null && esTraceparentValido(traceparent)) {
+            String[] partes = traceparent.split("-");
+            // Se conserva el identificador de traza del cliente y se genera un
+            // span nuevo para este salto del borde.
+            return partes[0] + "-" + partes[1] + "-" + formatTo16Hex(UUID.randomUUID().toString().replace("-", "")) + "-" + partes[3];
+        }
+        return "00-" + formatTo32Hex(traceIdDelGateway) + "-" + formatTo16Hex(UUID.randomUUID().toString().replace("-", "")) + "-01";
+    }
+
+    private boolean esTraceparentValido(String traceparent) {
+        String[] partes = traceparent.split("-");
+        if (partes.length != 4) {
+            return false;
+        }
+        return partes[1].length() == 32 && partes[2].length() == 16 && esHex(partes[1]) && esHex(partes[2]);
+    }
+
+    private boolean esHex(String valor) {
+        return valor.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+    }
+
     private String buildTargetUrl(String baseUrl, String path, String queryString) {
         StringBuilder url = new StringBuilder(baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl);
         if (path != null && !path.isEmpty()) {
@@ -137,11 +169,19 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
         return url.toString();
     }
 
+    /**
+     * Identificador de traza de 32 digitos hexadecimales.
+     *
+     * <p>Si el valor de partida no es hexadecimal valido, se deriva otro: un
+     * traceparent con un identificador que no es hexadecimal no lo entiende
+     * ningun colector de trazas.
+     */
     private String formatTo32Hex(String raw) {
-        String clean = raw.replace("-", "").toLowerCase();
-        if (clean.length() == 32) return clean;
-        if (clean.length() > 32) return clean.substring(0, 32);
-        return String.format("%32s", clean).replace(' ', '0');
+        String clean = raw == null ? "" : raw.replace("-", "").toLowerCase();
+        if (clean.length() == 32 && esHex(clean)) {
+            return clean;
+        }
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
     private String formatTo16Hex(String raw) {

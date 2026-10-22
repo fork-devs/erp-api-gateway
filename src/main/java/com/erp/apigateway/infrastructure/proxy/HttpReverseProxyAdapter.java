@@ -8,6 +8,7 @@ import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
 import com.erp.apigateway.infrastructure.config.BodyLimits;
 import com.erp.apigateway.infrastructure.config.GatewayResilienceProperties;
+import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -49,6 +50,7 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
     private final Map<String, TimeLimiter> timeLimiters;
     private final GatewayResilienceProperties resilienceProperties;
     private final BodyLimits bodyLimits;
+    private final GatewayMetrics gatewayMetrics;
     /**
      * El interruptor de tiempo ejecuta la llamada bloqueante en un hilo
      * virtual: el portador se libera mientras espera, que es justo lo que
@@ -61,8 +63,15 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
     }
 
     public HttpReverseProxyAdapter(GatewayResilienceProperties resilienceProperties, BodyLimits bodyLimits) {
+        this(resilienceProperties, bodyLimits, null);
+    }
+
+    public HttpReverseProxyAdapter(GatewayResilienceProperties resilienceProperties,
+                                   BodyLimits bodyLimits,
+                                   GatewayMetrics gatewayMetrics) {
         this.resilienceProperties = resilienceProperties;
         this.bodyLimits = bodyLimits;
+        this.gatewayMetrics = gatewayMetrics;
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(5))
@@ -83,6 +92,7 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
         this.httpClient = httpClient;
         this.resilienceProperties = resilienceProperties;
         this.bodyLimits = bodyLimits;
+        this.gatewayMetrics = null;
         this.circuitBreakers = circuitBreakers;
         this.timeLimiters = timeLimiters;
         this.executor = executor;
@@ -100,6 +110,7 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
                     () -> interruptor.executeSupplier(() -> enviar(request)),
                     executor));
         } catch (CallNotPermittedException ex) {
+            publicarEstadoDelCircuito(destino, interruptor);
             // El circuito esta abierto: el destino no se llama.
             log.warn("Circuito abierto para el destino {}: no se reenvia la peticion", destino);
             throw new CircuitOpenException(
@@ -116,6 +127,14 @@ public class HttpReverseProxyAdapter implements ReverseProxyPort {
             log.error("Error al comunicar con servicio downstream ({}): {}", request.targetUrl(), e.getMessage());
             throw new TargetServiceUnavailableException(
                     "El microservicio destino no esta disponible o timeout (" + request.targetUrl() + ")", e);
+        } finally {
+            publicarEstadoDelCircuito(destino, interruptor);
+        }
+    }
+
+    private void publicarEstadoDelCircuito(String destino, CircuitBreaker interruptor) {
+        if (gatewayMetrics != null) {
+            gatewayMetrics.estadoDelCircuito(destino, interruptor.getState().name());
         }
     }
 

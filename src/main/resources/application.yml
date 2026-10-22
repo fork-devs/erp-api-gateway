@@ -25,6 +25,35 @@ spring:
       connect-timeout: ${HTTP_CLIENT_CONNECT_TIMEOUT:2s}
       read-timeout: ${HTTP_CLIENT_READ_TIMEOUT:5s}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # Lo minimo para observar el borde: salud, metricas e informacion.
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # El detalle de las dependencias NO es publico: informa de las URLs
+      # internas y del estado de la plataforma (hallazgo 6.37).
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,gatewayDependencies
+        liveness:
+          include: livenessState
+  health:
+    db:
+      enabled: false
+    readiness:
+      state:
+        enabled: true
+    liveness:
+      state:
+        enabled: true
+
 erp:
   gateway:
     # La URL del conjunto de claves debe usar un esquema cifrado. El arranque

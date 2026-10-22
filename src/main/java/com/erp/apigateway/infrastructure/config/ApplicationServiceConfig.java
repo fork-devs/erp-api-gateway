@@ -10,11 +10,13 @@ import com.erp.apigateway.domain.port.RateLimiterPort;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.bulkhead.SemaphoreBulkheadAdapter;
+import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import com.erp.apigateway.infrastructure.client.TenantServiceClientAdapter;
 import com.erp.apigateway.infrastructure.proxy.HttpReverseProxyAdapter;
 import com.erp.apigateway.infrastructure.ratelimit.TokenBucketRateLimiterAdapter;
 import com.erp.apigateway.infrastructure.security.JwksKeyManager;
 import com.erp.apigateway.infrastructure.security.NimbusJwtValidatorAdapter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,10 +61,16 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
+    public GatewayMetrics gatewayMetrics(MeterRegistry meterRegistry) {
+        return new GatewayMetrics(meterRegistry);
+    }
+
+    @Bean
     public ReverseProxyPort reverseProxyPort(
             GatewayProperties gatewayProperties,
-            GatewayResilienceProperties resilienceProperties) {
-        return new HttpReverseProxyAdapter(resilienceProperties, gatewayProperties.bodyLimits());
+            GatewayResilienceProperties resilienceProperties,
+            GatewayMetrics gatewayMetrics) {
+        return new HttpReverseProxyAdapter(resilienceProperties, gatewayProperties.bodyLimits(), gatewayMetrics);
     }
 
     @Bean

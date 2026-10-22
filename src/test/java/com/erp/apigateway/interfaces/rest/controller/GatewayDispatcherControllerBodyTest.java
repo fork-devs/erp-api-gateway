@@ -7,6 +7,7 @@ import com.erp.apigateway.application.usecase.ValidateGatewayRequestUseCase;
 import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.config.GatewayProperties;
+import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,6 +53,9 @@ class GatewayDispatcherControllerBodyTest {
     @Mock
     private TenantQuotaPort tenantQuotaPort;
 
+    @Mock
+    private GatewayMetrics gatewayMetrics;
+
     private GatewayProperties gatewayProperties;
     private GatewayDispatcherController controller;
 
@@ -61,6 +65,7 @@ class GatewayDispatcherControllerBodyTest {
         gatewayProperties.setMaxInboundBodyBytes(1024);
         controller = new GatewayDispatcherController(
                 gatewayProperties,
+                gatewayMetrics,
                 validateGatewayRequestUseCase,
                 executeRateLimitUseCase,
                 executeBulkheadUseCase,
