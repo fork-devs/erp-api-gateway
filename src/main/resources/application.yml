@@ -25,35 +25,6 @@ spring:
       connect-timeout: ${HTTP_CLIENT_CONNECT_TIMEOUT:2s}
       read-timeout: ${HTTP_CLIENT_READ_TIMEOUT:5s}
 
-management:
-  endpoints:
-    web:
-      exposure:
-        # Lo minimo para observar el borde: salud, metricas e informacion.
-        include: health,info,metrics,prometheus
-  endpoint:
-    health:
-      # El detalle de las dependencias NO es publico: informa de las URLs
-      # internas y del estado de la plataforma (hallazgo 6.37).
-      show-details: never
-      show-components: never
-      probes:
-        enabled: true
-      group:
-        readiness:
-          include: readinessState,gatewayDependencies
-        liveness:
-          include: livenessState
-  health:
-    db:
-      enabled: false
-    readiness:
-      state:
-        enabled: true
-    liveness:
-      state:
-        enabled: true
-
 erp:
   gateway:
     # La URL del conjunto de claves debe usar un esquema cifrado. El arranque
@@ -83,7 +54,7 @@ erp:
       time-limiter:
         margin: 250ms
     routes:
-      auth-service:
+      "[auth-service]":
         path-prefix: /api/v1/auth
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
@@ -92,22 +63,22 @@ erp:
         # filtro. Viaja como una PISTA, que el destino contrasta con el token.
         tenant-filter-allowed: true
         timeout-ms: 10000
-      users-service:
+      "[users-service]":
         path-prefix: /api/v1/users
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: true
         timeout-ms: 10000
-      tenant-service:
+      "[tenant-service]":
         path-prefix: /api/v1/tenants
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: true
         timeout-ms: 10000
-      plans-service:
+      "[plans-service]":
         path-prefix: /api/v1/plans
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: false
         timeout-ms: 10000
-      outbox-admin-service:
+      "[outbox-admin-service]":
         path-prefix: /api/v1/admin/outbox
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: true
@@ -117,7 +88,7 @@ erp:
         # destino.
         required-role: ADMIN_TALLER
         timeout-ms: 10000
-      fleet-service:
+      "[fleet-service]":
         path-prefix: /api/v1/fleet
         target-url: ${FLEET_SERVICE_URL:http://localhost:8083}
         requires-auth: true
@@ -129,7 +100,7 @@ erp:
         # al MECANICO, escribir no—. El filtro fino lo aplica el servicio de
         # destino, que es quien distingue las operaciones.
         timeout-ms: 500
-      work-order-service:
+      "[work-order-service]":
         path-prefix: /api/v1/work-orders
         # Puerto libre: el 8084 es el del servicio de inventario. El servicio
         # de ordenes de trabajo todavia no existe.
@@ -137,7 +108,7 @@ erp:
         requires-auth: true
         # El plazo que fija el spec para las comunicaciones internas.
         timeout-ms: 500
-      inventory-service:
+      "[inventory-service]":
         path-prefix: /api/v1/inventory
         # El servicio de inventario escucha en el 8084: la ruta apuntaba al
         # 8085, que es el puerto del hub de integraciones, de modo que
@@ -146,12 +117,12 @@ erp:
         requires-auth: true
         # El plazo que fija el spec para las comunicaciones internas.
         timeout-ms: 500
-      billing-service:
+      "[billing-service]":
         path-prefix: /api/v1/billing
         target-url: ${BILLING_SERVICE_URL:http://localhost:8086}
         requires-auth: true
         timeout-ms: 10000
-      telemetry-service:
+      "[telemetry-service]":
         path-prefix: /api/v1/telemetry
         target-url: ${TELEMETRY_SERVICE_URL:http://localhost:8087}
         requires-auth: true
@@ -161,10 +132,30 @@ management:
   endpoints:
     web:
       exposure:
+        # Lo minimo para observar el borde: salud, metricas e informacion.
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: always
+      # El detalle de las dependencias NO es publico: informa de las URLs
+      # internas y del estado de la plataforma (hallazgo 6.37).
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,gatewayDependencies
+        liveness:
+          include: livenessState
+  health:
+    db:
+      enabled: false
+    readiness:
+      state:
+        enabled: true
+    liveness:
+      state:
+        enabled: true
 
 springdoc:
   api-docs:
