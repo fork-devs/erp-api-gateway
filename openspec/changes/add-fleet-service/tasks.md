@@ -85,5 +85,5 @@
 - [x] 9.4 Regenerar `docs/matriz-roles-endpoints.md` con `docs/verificar-matriz-roles.py` para que incluya los endpoints de fleet, y verificar que el comando **falla** si algún endpoint de escritura queda sin rol declarado
 - [x] 9.5 Actualizar `docs/doc-estado-implementacion.md`: la fila 4 de §2 deja de decir "⚫ No existe" y pasa al estado real, con los hallazgos que este change cierra en este servicio
 - [x] 9.6 Actualizar `docs/doc-microservices.md` §3.3 con lo implementado (validación asíncrona, caché, circuito y roles) y §2 con la nomenclatura del ADR-003; verificar con `grep -n "fleet-service" docs/doc-microservices.md` que las referencias son consistentes
-- [ ] 9.7 Validar el change con `openspec validate --all --strict` en el repositorio y en la raíz del workspace, y comprobar que `git log --merges develop..feature/add-fleet-service` **no devuelve ninguna línea**
-- [ ] 9.8 Publicar la rama `feature/add-fleet-service` en el remoto `fork-devs/erp-fleet-service`, **sin merges**, con un commit por task y los mensajes en inglés
+- [x] 9.7 Validar el change con `openspec validate --all --strict` en el repositorio y en la raíz del workspace, y comprobar que `git log --merges develop..feature/add-fleet-service` **no devuelve ninguna línea**
+- [x] 9.8 Publicar la rama `feature/add-fleet-service` en el remoto `fork-devs/erp-fleet-service`, **sin merges**, con un commit por task y los mensajes en inglés
