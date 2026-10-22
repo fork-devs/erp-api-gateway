@@ -17,6 +17,8 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,6 +30,8 @@ class NimbusJwtValidatorTest {
     private RSAPrivateKey privateKey;
     private RSAPublicKey publicKey;
     private final String keyId = "test-key-1";
+    private static final String EMISOR = "https://auth.test.erp-automotriz.com";
+    private static final String AUDIENCIA = "erp-api-gateway";
 
     @BeforeEach
     void setUp() throws Exception {
@@ -38,10 +42,12 @@ class NimbusJwtValidatorTest {
         this.publicKey = (RSAPublicKey) keyPair.getPublic();
 
         GatewayProperties properties = new GatewayProperties();
-        this.jwksKeyManager = new JwksKeyManager(properties);
+        // El perfil de desarrollo local es el unico que permite la URL en
+        // claro; el resto de las comprobaciones las hace el propio cliente.
+        this.jwksKeyManager = new JwksKeyManager(properties.getJwksUrl(), List.of("dev"));
         this.jwksKeyManager.registerManualKey(keyId, publicKey);
 
-        this.validator = new NimbusJwtValidatorAdapter(jwksKeyManager);
+        this.validator = new NimbusJwtValidatorAdapter(jwksKeyManager, EMISOR, AUDIENCIA);
     }
 
     @Test
@@ -53,9 +59,10 @@ class NimbusJwtValidatorTest {
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
                 .subject(userId.toString())
                 .claim("tenant_id", tenantId.toString())
-                .claim("role", "ADMINISTRADOR")
+                .claim("roles", List.of("ADMINISTRADOR", "MECANICO"))
                 .claim("email", "admin@taller.pe")
-                .issuer("erp-auth-service")
+                .issuer(EMISOR)
+                .audience(AUDIENCIA)
                 .issueTime(new Date())
                 .expirationTime(new Date(System.currentTimeMillis() + 3600000))
                 .build();
@@ -72,7 +79,9 @@ class NimbusJwtValidatorTest {
         assertNotNull(claims);
         assertEquals(userId, claims.getUserId());
         assertEquals(tenantId, claims.getTenantId());
-        assertEquals("ADMINISTRADOR", claims.getRole());
+        assertEquals(2, claims.getRoles().size(), "No se puede perder ningun rol del token");
+        assertTrue(claims.getRoles().contains("ADMINISTRADOR"));
+        assertTrue(claims.getRoles().contains("MECANICO"));
         assertEquals("admin@taller.pe", claims.getEmail());
         assertFalse(claims.isExpired());
     }
@@ -86,6 +95,9 @@ class NimbusJwtValidatorTest {
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
                 .subject(userId.toString())
                 .claim("tenant_id", tenantId.toString())
+                .claim("roles", List.of("MECANICO"))
+                .issuer(EMISOR)
+                .audience(AUDIENCIA)
                 .issueTime(new Date(System.currentTimeMillis() - 7200000))
                 .expirationTime(new Date(System.currentTimeMillis() - 3600000))
                 .build();

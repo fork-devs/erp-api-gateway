@@ -10,7 +10,7 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "erp.gateway")
 public class GatewayProperties {
 
-    private String jwksUrl = "http://localhost:8081/.well-known/jwks.json";
+    private String jwksUrl = "https://auth.erp-automotriz.com/.well-known/jwks.json";
     private String tenantServiceUrl = "http://localhost:8082";
     private int defaultTimeoutMs = 10000;
     private Map<String, ServiceRoute> routes = new HashMap<>();

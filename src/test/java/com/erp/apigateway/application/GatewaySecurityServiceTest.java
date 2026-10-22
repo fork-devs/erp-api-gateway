@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -80,7 +81,7 @@ class GatewaySecurityServiceTest {
                 "127.0.0.1"
         );
 
-        TokenClaims mockClaims = new TokenClaims(userId, tenantId, "ADMINISTRADOR", "admin@taller.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
+        TokenClaims mockClaims = new TokenClaims(userId, tenantId, Set.of("ADMINISTRADOR"), "admin@taller.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
         TenantQuota activeQuota = new TenantQuota(tenantId, "ACTIVE", "PRO", 500, 40);
 
         when(jwtValidatorPort.validate(validToken)).thenReturn(mockClaims);
@@ -110,7 +111,7 @@ class GatewaySecurityServiceTest {
                 "127.0.0.1"
         );
 
-        TokenClaims mockClaims = new TokenClaims(userId, tenantId, "ADMINISTRADOR", "admin@taller.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
+        TokenClaims mockClaims = new TokenClaims(userId, tenantId, Set.of("ADMINISTRADOR"), "admin@taller.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
         TenantQuota suspendedQuota = new TenantQuota(tenantId, "SUSPENDED", "PRO", 500, 40);
 
         when(jwtValidatorPort.validate(validToken)).thenReturn(mockClaims);

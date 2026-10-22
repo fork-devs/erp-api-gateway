@@ -38,10 +38,19 @@ public class GatewayDispatcherController {
 
     private static final Logger log = LoggerFactory.getLogger(GatewayDispatcherController.class);
 
+    /**
+     * Rutas que se sirven sin autenticacion.
+     *
+     * <p>Cada una tiene que existir en el servicio de destino. Una ruta
+     * declarada como publica que no existe no es un problema de seguridad
+     * (no hay nada que proteger), pero es un fallo de configuracion que no
+     * se ve: la peticion simplemente no encuentra nada.
+     */
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/api/v1/auth/login",
-            "/api/v1/auth/register",
             "/api/v1/auth/refresh",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
             "/.well-known/jwks.json",
             "/api/v1/plans"
     );

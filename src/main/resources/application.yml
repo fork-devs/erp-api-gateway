@@ -9,7 +9,10 @@ spring:
 
 erp:
   gateway:
-    jwks-url: ${JWKS_URL:http://localhost:8081/.well-known/jwks.json}
+    # La URL del conjunto de claves debe usar un esquema cifrado. El arranque
+    # falla de forma explicita si no lo hace, y la unica excepcion es el
+    # perfil de desarrollo local (application-dev.yml).
+    jwks-url: ${JWKS_URL:https://auth.erp-automotriz.com/.well-known/jwks.json}
     tenant-service-url: ${TENANT_SERVICE_URL:http://localhost:8082}
     default-timeout-ms: ${DEFAULT_TIMEOUT_MS:10000}
     routes:
@@ -17,6 +20,11 @@ erp:
         path-prefix: /api/v1/auth
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
+        timeout-ms: 10000
+      users-service:
+        path-prefix: /api/v1/users
+        target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+        requires-auth: true
         timeout-ms: 10000
       tenant-service:
         path-prefix: /api/v1/tenants

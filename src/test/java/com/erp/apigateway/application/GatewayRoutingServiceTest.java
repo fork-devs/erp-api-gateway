@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,7 +43,7 @@ class GatewayRoutingServiceTest {
     void shouldInjectHeadersAndRoute() {
         UUID userId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        TokenClaims claims = new TokenClaims(userId, tenantId, "MECANICO", "mecanico@taller.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
+        TokenClaims claims = new TokenClaims(userId, tenantId, Set.of("MECANICO"), "mecanico@taller.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
         RouteTarget target = new RouteTarget("fleet-service", "http://localhost:8083", 5000, true);
 
         InboundRequest inboundRequest = new InboundRequest(
