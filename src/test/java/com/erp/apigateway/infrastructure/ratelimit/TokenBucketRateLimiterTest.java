@@ -46,4 +46,42 @@ class TokenBucketRateLimiterTest {
         assertTrue(rateLimiter.checkAndConsume(tenantB, 2).allowed());
         assertFalse(rateLimiter.checkAndConsume(tenantB, 2).allowed());
     }
+
+    @Test
+    @DisplayName("Should apply the new limit when the plan is upgraded")
+    void shouldApplyTheNewLimitWhenThePlanIsUpgraded() {
+        TokenBucketRateLimiterAdapter rateLimiter = new TokenBucketRateLimiterAdapter();
+        UUID tenantId = UUID.randomUUID();
+
+        // Taller en BASICO: 2 req/min
+        assertTrue(rateLimiter.checkAndConsume(tenantId, 2).allowed());
+        assertTrue(rateLimiter.checkAndConsume(tenantId, 2).allowed());
+        assertFalse(rateLimiter.checkAndConsume(tenantId, 2).allowed());
+
+        // Sube a ENTERPRISE: 2000 req/min. El cubo debe reconocer el limite
+        // nuevo de inmediato, no esperar a que expire la entrada de cache.
+        for (int i = 0; i < 100; i++) {
+            assertTrue(rateLimiter.checkAndConsume(tenantId, 2000).allowed(),
+                    "la peticion " + (i + 1) + " debe admitirse con el limite nuevo");
+        }
+    }
+
+    @Test
+    @DisplayName("Should clamp the tokens when the plan is downgraded")
+    void shouldClampTheTokensWhenThePlanIsDowngraded() {
+        TokenBucketRateLimiterAdapter rateLimiter = new TokenBucketRateLimiterAdapter();
+        UUID tenantId = UUID.randomUUID();
+
+        // Taller en ENTERPRISE: 2000 req/min, se consumen 100
+        for (int i = 0; i < 100; i++) {
+            assertTrue(rateLimiter.checkAndConsume(tenantId, 2000).allowed());
+        }
+
+        // Baja a BASICO: 2 req/min. Los tokens sobrantes se recortan: el
+        // limite nuevo es el que manda.
+        assertTrue(rateLimiter.checkAndConsume(tenantId, 2).allowed());
+        assertTrue(rateLimiter.checkAndConsume(tenantId, 2).allowed());
+        assertFalse(rateLimiter.checkAndConsume(tenantId, 2).allowed(),
+                "con el limite del plan nuevo no debe admitirse una tercera peticion");
+    }
 }

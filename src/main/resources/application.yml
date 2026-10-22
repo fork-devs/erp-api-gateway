@@ -6,6 +6,24 @@ server:
 spring:
   application:
     name: erp-api-gateway
+  threads:
+    # El techo de concurrencia del borde NO lo pone la CPU: lo ponen los
+    # hilos de plataforma. Con los hilos virtuales, el send() bloqueante
+    # libera el portador mientras espera, y el borde escala a miles de
+    # peticiones concurrentes sin cambiar el modelo de programacion.
+    # Requiere Java 21 (el enforcer del pom lo exige).
+    virtual:
+      enabled: true
+  codec:
+    # Tope del cuerpo ENTRANTE. El saliente lo acota el adaptador de reenvio,
+    # porque ninguna propiedad lo cubre: ver HttpReverseProxyAdapter.
+    max-in-memory-size: ${MAX_IN_MEMORY_SIZE:1MB}
+  http:
+    client:
+      # Timeouts del cliente HTTP auto-configurado (RestClient). Sin ellos, un
+      # servicio de destino colgado bloquea el hilo indefinidamente.
+      connect-timeout: ${HTTP_CLIENT_CONNECT_TIMEOUT:2s}
+      read-timeout: ${HTTP_CLIENT_READ_TIMEOUT:5s}
 
 erp:
   gateway:
@@ -15,28 +33,52 @@ erp:
     jwks-url: ${JWKS_URL:https://auth.erp-automotriz.com/.well-known/jwks.json}
     tenant-service-url: ${TENANT_SERVICE_URL:http://localhost:8082}
     default-timeout-ms: ${DEFAULT_TIMEOUT_MS:10000}
+    # Topes del cuerpo, en bytes. El entrante va acompanado de la propiedad
+    # spring.codec.max-in-memory-size (que acota la memoria); el saliente lo
+    # acota el adaptador de reenvio, porque ninguna propiedad lo cubre.
+    max-inbound-body-bytes: ${MAX_INBOUND_BODY_BYTES:1048576}
+    max-outbound-body-bytes: ${MAX_OUTBOUND_BODY_BYTES:2097152}
+    resilience:
+      # Interruptor de circuito POR DESTINO: cuando un servicio deja de
+      # responder, el borde deja de llamarlo en vez de esperar su timeout en
+      # cada peticion (hallazgo 6.57).
+      circuit-breaker:
+        defaults:
+          failure-rate-threshold: 50
+          minimum-number-of-calls: 5
+          sliding-window-size: 10
+          wait-duration-in-open-state: 30s
+          permitted-number-of-calls-in-half-open-state: 2
+        destinations: {}
+      # Margen del interruptor de tiempo sobre el plazo de la ruta.
+      time-limiter:
+        margin: 250ms
     routes:
-      auth-service:
+      "[auth-service]":
         path-prefix: /api/v1/auth
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
+        # Ruta de ARRANQUE: en el login, el refresco y el
+        # restablecimiento de contrasena el cliente declara el taller como
+        # filtro. Viaja como una PISTA, que el destino contrasta con el token.
+        tenant-filter-allowed: true
         timeout-ms: 10000
-      users-service:
+      "[users-service]":
         path-prefix: /api/v1/users
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: true
         timeout-ms: 10000
-      tenant-service:
+      "[tenant-service]":
         path-prefix: /api/v1/tenants
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: true
         timeout-ms: 10000
-      plans-service:
+      "[plans-service]":
         path-prefix: /api/v1/plans
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: false
         timeout-ms: 10000
-      outbox-admin-service:
+      "[outbox-admin-service]":
         path-prefix: /api/v1/admin/outbox
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: true
@@ -46,7 +88,7 @@ erp:
         # destino.
         required-role: ADMIN_TALLER
         timeout-ms: 10000
-      fleet-service:
+      "[fleet-service]":
         path-prefix: /api/v1/fleet
         target-url: ${FLEET_SERVICE_URL:http://localhost:8083}
         requires-auth: true
@@ -58,7 +100,7 @@ erp:
         # al MECANICO, escribir no—. El filtro fino lo aplica el servicio de
         # destino, que es quien distingue las operaciones.
         timeout-ms: 500
-      work-order-service:
+      "[work-order-service]":
         path-prefix: /api/v1/work-orders
         # Puerto libre: el 8084 es el del servicio de inventario. El servicio
         # de ordenes de trabajo todavia no existe.
@@ -66,7 +108,7 @@ erp:
         requires-auth: true
         # El plazo que fija el spec para las comunicaciones internas.
         timeout-ms: 500
-      inventory-service:
+      "[inventory-service]":
         path-prefix: /api/v1/inventory
         # El servicio de inventario escucha en el 8084: la ruta apuntaba al
         # 8085, que es el puerto del hub de integraciones, de modo que
@@ -75,12 +117,12 @@ erp:
         requires-auth: true
         # El plazo que fija el spec para las comunicaciones internas.
         timeout-ms: 500
-      billing-service:
+      "[billing-service]":
         path-prefix: /api/v1/billing
         target-url: ${BILLING_SERVICE_URL:http://localhost:8086}
         requires-auth: true
         timeout-ms: 10000
-      telemetry-service:
+      "[telemetry-service]":
         path-prefix: /api/v1/telemetry
         target-url: ${TELEMETRY_SERVICE_URL:http://localhost:8087}
         requires-auth: true
@@ -90,10 +132,30 @@ management:
   endpoints:
     web:
       exposure:
+        # Lo minimo para observar el borde: salud, metricas e informacion.
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: always
+      # El detalle de las dependencias NO es publico: informa de las URLs
+      # internas y del estado de la plataforma (hallazgo 6.37).
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,gatewayDependencies
+        liveness:
+          include: livenessState
+  health:
+    db:
+      enabled: false
+    readiness:
+      state:
+        enabled: true
+    liveness:
+      state:
+        enabled: true
 
 springdoc:
   api-docs:

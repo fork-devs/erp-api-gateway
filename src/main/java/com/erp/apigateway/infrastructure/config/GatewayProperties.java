@@ -1,12 +1,11 @@
 package com.erp.apigateway.infrastructure.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
-@Configuration
 @ConfigurationProperties(prefix = "erp.gateway")
 public class GatewayProperties {
 
@@ -14,6 +13,22 @@ public class GatewayProperties {
     private String tenantServiceUrl = "http://localhost:8082";
     private int defaultTimeoutMs = 10000;
     private Map<String, ServiceRoute> routes = new HashMap<>();
+
+    /**
+     * Topes del cuerpo, en bytes. El entrante acota la memoria del borde (y
+     * lo acompaña la propiedad spring.codec.max-in-memory-size); el saliente
+     * lo acota el adaptador de reenvio, porque ninguna propiedad lo cubre
+     * (hallazgo 6.33).
+     */
+    private int maxInboundBodyBytes = BodyLimits.DEFAULT_INBOUND_BYTES;
+    private int maxOutboundBodyBytes = BodyLimits.DEFAULT_OUTBOUND_BYTES;
+
+    /**
+     * Tiempo que se guarda la cuota y el estado del taller antes de volver a
+     * consultar al servicio de talleres. Es la ventana en la que un cambio de
+     * plan NO se ve, asi que es corta a proposito.
+     */
+    private Duration tenantQuotaCacheTtl = Duration.ofMinutes(1);
 
     public static class ServiceRoute {
         private String pathPrefix;
@@ -29,6 +44,16 @@ public class GatewayProperties {
          * servicio de destino.
          */
         private String requiredRole;
+        /**
+         * Ruta de ARRANQUE (login, refresco, restablecimiento): el cliente
+         * declara el taller como filtro porque la consulta por hash ocurre
+         * antes de conocer la fila. El valor viaja al destino como una
+         * PISTA, que el destino contrasta con el token.
+         *
+         * <p>En cualquier otra ruta, la cabecera de identidad del cliente se
+         * descarta (hallazgo 6.30).
+         */
+        private boolean tenantFilterAllowed = false;
 
         public ServiceRoute() {}
 
@@ -45,6 +70,14 @@ public class GatewayProperties {
 
         public void setRequiredRole(String requiredRole) {
             this.requiredRole = requiredRole;
+        }
+
+        public boolean isTenantFilterAllowed() {
+            return tenantFilterAllowed;
+        }
+
+        public void setTenantFilterAllowed(boolean tenantFilterAllowed) {
+            this.tenantFilterAllowed = tenantFilterAllowed;
         }
 
         public String getPathPrefix() {
@@ -110,5 +143,33 @@ public class GatewayProperties {
 
     public void setRoutes(Map<String, ServiceRoute> routes) {
         this.routes = routes;
+    }
+
+    public int getMaxInboundBodyBytes() {
+        return maxInboundBodyBytes;
+    }
+
+    public void setMaxInboundBodyBytes(int maxInboundBodyBytes) {
+        this.maxInboundBodyBytes = maxInboundBodyBytes;
+    }
+
+    public int getMaxOutboundBodyBytes() {
+        return maxOutboundBodyBytes;
+    }
+
+    public void setMaxOutboundBodyBytes(int maxOutboundBodyBytes) {
+        this.maxOutboundBodyBytes = maxOutboundBodyBytes;
+    }
+
+    public Duration getTenantQuotaCacheTtl() {
+        return tenantQuotaCacheTtl;
+    }
+
+    public void setTenantQuotaCacheTtl(Duration tenantQuotaCacheTtl) {
+        this.tenantQuotaCacheTtl = tenantQuotaCacheTtl;
+    }
+
+    public BodyLimits bodyLimits() {
+        return new BodyLimits(maxInboundBodyBytes, maxOutboundBodyBytes);
     }
 }

@@ -1,11 +1,15 @@
 package com.erp.apigateway.interfaces.rest.advice;
 
 import com.erp.apigateway.domain.exception.BulkheadExceededException;
+import com.erp.apigateway.domain.exception.CircuitOpenException;
 import com.erp.apigateway.domain.exception.GatewayException;
+import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
 import com.erp.apigateway.domain.exception.InvalidTokenException;
+import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.RateLimitExceededException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
 import com.erp.apigateway.domain.exception.TenantForbiddenException;
+import com.erp.apigateway.domain.exception.TenantStatusUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -63,6 +67,60 @@ public class GatewayExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
         problem.setTitle("Capacidad de Concurrencia Saturada (Bulkhead)");
         problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/bulkhead-exceeded"));
+        problem.setProperty("errorCode", ex.getErrorCode());
+        problem.setProperty("timestamp", Instant.now());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "5");
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).headers(headers).body(problem);
+    }
+
+    @ExceptionHandler(TenantStatusUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleTenantStatusUnavailable(TenantStatusUnavailableException ex) {
+        // El estado del taller no se ha podido determinar: se falla CERRADO.
+        // Un taller suspendido no puede volver a operar porque el servicio de
+        // talleres no responda (hallazgo 6.31).
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("Estado del Taller No Determinable");
+        problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/tenant-status-unavailable"));
+        problem.setProperty("errorCode", ex.getErrorCode());
+        problem.setProperty("timestamp", Instant.now());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "5");
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).headers(headers).body(problem);
+    }
+
+    @ExceptionHandler(InvalidTenantFilterException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidTenantFilter(InvalidTenantFilterException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Filtro de Taller Inválido");
+        problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/invalid-tenant-filter"));
+        problem.setProperty("errorCode", ex.getErrorCode());
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    @ExceptionHandler(PayloadTooLargeException.class)
+    public ResponseEntity<ProblemDetail> handlePayloadTooLarge(PayloadTooLargeException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE, ex.getMessage());
+        problem.setTitle("Cuerpo de la Petición Excedido");
+        problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/payload-too-large"));
+        problem.setProperty("errorCode", ex.getErrorCode());
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(problem);
+    }
+
+    @ExceptionHandler(CircuitOpenException.class)
+    public ResponseEntity<ProblemDetail> handleCircuitOpen(CircuitOpenException ex) {
+        // El circuito del destino esta abierto: no se le llama. No es lo mismo
+        // que un fallo durante la llamada, y el cliente lo distingue por el
+        // codigo de error y por el Retry-After (hallazgo 6.57).
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("Servicio Destino no Disponible Temporalmente");
+        problem.setType(URI.create("https://errors.erp-automotive.pe/gateway/circuit-open"));
         problem.setProperty("errorCode", ex.getErrorCode());
         problem.setProperty("timestamp", Instant.now());
 

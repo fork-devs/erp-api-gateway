@@ -1,9 +1,10 @@
 package com.erp.apigateway.application;
 
 import com.erp.apigateway.application.dto.InboundRequest;
-import com.erp.apigateway.application.dto.OutboundRequest;
-import com.erp.apigateway.application.dto.ProxyResponse;
+import com.erp.apigateway.domain.model.OutboundRequest;
+import com.erp.apigateway.domain.model.ProxyResponse;
 import com.erp.apigateway.application.service.GatewayRoutingService;
+import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
 import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.TokenClaims;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -86,5 +88,210 @@ class GatewayRoutingServiceTest {
         // Hop-by-hop headers should be stripped
         assertFalse(headers.containsKey("Host"));
         assertFalse(headers.containsKey("Connection"));
+    }
+
+    @Test
+    @DisplayName("Should not forward the identity headers injected by the client")
+    void noDebeReenviarLaIdentidadInyectadaPorElCliente() {
+        // El atacante es el taller B y el taller A es la victima: el atacante
+        // intenta que el servicio de destino crea que el principal es un
+        // usuario del taller A (hallazgo 6.30).
+        UUID usuarioAtacante = UUID.randomUUID();
+        UUID tallerAtacante = UUID.randomUUID();
+        UUID victimaDelTallerA = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+        TokenClaims claims = new TokenClaims(usuarioAtacante, tallerAtacante, Set.of("MECANICO"),
+                "atacante@tallerB.pe", "erp-auth", Instant.now(), Instant.now().plusSeconds(3600));
+        RouteTarget target = new RouteTarget("fleet-service", "http://localhost:8083", 5000, true);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "GET",
+                "/api/v1/fleet/vehicles",
+                null,
+                Map.of(
+                        "X-User-ID", List.of(victimaDelTallerA.toString()),
+                        "X-User-Role", List.of("SUPERADMIN"),
+                        "X-User-Email", List.of("admin@tallerA.pe"),
+                        "X-Tenant-ID", List.of("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                ),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        when(reverseProxyPort.forward(any(OutboundRequest.class)))
+                .thenReturn(new ProxyResponse(200, Map.of(), new byte[0]));
+
+        routingService.route(inboundRequest, target, claims, "traza");
+
+        ArgumentCaptor<OutboundRequest> captor = ArgumentCaptor.forClass(OutboundRequest.class);
+        verify(reverseProxyPort).forward(captor.capture());
+        Map<String, List<String>> headers = captor.getValue().headers();
+
+        assertEquals(usuarioAtacante.toString(), headers.get("X-User-ID").get(0));
+        assertEquals("MECANICO", headers.get("X-User-Role").get(0));
+        assertEquals("atacante@tallerB.pe", headers.get("X-User-Email").get(0));
+        assertEquals(tallerAtacante.toString(), headers.get("X-Tenant-ID").get(0));
+    }
+
+    @Test
+    @DisplayName("Should not forward the identity headers on a public route")
+    void noDebeReenviarLaIdentidadEnUnaRutaPublica() {
+        RouteTarget target = new RouteTarget("auth-service", "http://localhost:8081", 10000, false);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "POST",
+                "/api/v1/auth/login",
+                null,
+                Map.of(
+                        "X-User-ID", List.of("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        "X-User-Role", List.of("SUPERADMIN"),
+                        "X-User-Email", List.of("admin@tallerA.pe"),
+                        "X-Tenant-ID", List.of("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                ),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        when(reverseProxyPort.forward(any(OutboundRequest.class)))
+                .thenReturn(new ProxyResponse(200, Map.of(), new byte[0]));
+
+        routingService.route(inboundRequest, target, null, "traza");
+
+        ArgumentCaptor<OutboundRequest> captor = ArgumentCaptor.forClass(OutboundRequest.class);
+        verify(reverseProxyPort).forward(captor.capture());
+        Map<String, List<String>> headers = captor.getValue().headers();
+
+        assertFalse(headers.containsKey("X-User-ID"));
+        assertFalse(headers.containsKey("X-User-Role"));
+        assertFalse(headers.containsKey("X-User-Email"));
+        assertFalse(headers.containsKey("X-Tenant-ID"));
+    }
+
+    @Test
+    @DisplayName("Should forward the tenant filter on a startup route")
+    void debeReenviarElFiltroDeTallerEnUnaRutaDeArranque() {
+        UUID taller = UUID.randomUUID();
+        RouteTarget target = new RouteTarget("auth-service", "http://localhost:8081", 10000, false, null, true);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "POST",
+                "/api/v1/auth/login",
+                null,
+                Map.of("X-Tenant-ID", List.of(taller.toString())),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        when(reverseProxyPort.forward(any(OutboundRequest.class)))
+                .thenReturn(new ProxyResponse(200, Map.of(), new byte[0]));
+
+        routingService.route(inboundRequest, target, null, "traza");
+
+        ArgumentCaptor<OutboundRequest> captor = ArgumentCaptor.forClass(OutboundRequest.class);
+        verify(reverseProxyPort).forward(captor.capture());
+
+        assertEquals(taller.toString(), captor.getValue().headers().get("X-Tenant-ID").get(0));
+    }
+
+    @Test
+    @DisplayName("Should reject a tenant filter that is not an identifier")
+    void debeRechazarUnFiltroDeTallerQueNoEsIdentificador() {
+        RouteTarget target = new RouteTarget("auth-service", "http://localhost:8081", 10000, false, null, true);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "POST",
+                "/api/v1/auth/login",
+                null,
+                Map.of("X-Tenant-ID", List.of("no-es-un-uuid")),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        assertThrows(InvalidTenantFilterException.class,
+                () -> routingService.route(inboundRequest, target, null, "traza"));
+
+        verify(reverseProxyPort, never()).forward(any(OutboundRequest.class));
+    }
+
+    @Test
+    @DisplayName("Should continue the trace context of the client")
+    void debeContinuarElContextoDeTrazaDelCliente() {
+        // El traceparent del cliente se CONTINUA: se conserva su identificador
+        // de traza y se genera un span nuevo para este salto (hallazgo 6.39).
+        String traceparentDelCliente = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        RouteTarget target = new RouteTarget("fleet-service", "http://localhost:8083", 5000, true);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "GET",
+                "/api/v1/fleet/vehicles",
+                null,
+                Map.of("traceparent", List.of(traceparentDelCliente)),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        when(reverseProxyPort.forward(any(OutboundRequest.class)))
+                .thenReturn(new ProxyResponse(200, Map.of(), new byte[0]));
+
+        routingService.route(inboundRequest, target, null, "traza");
+
+        ArgumentCaptor<OutboundRequest> captor = ArgumentCaptor.forClass(OutboundRequest.class);
+        verify(reverseProxyPort).forward(captor.capture());
+
+        String traceparent = captor.getValue().headers().get("traceparent").get(0);
+        assertThat(traceparent).startsWith("00-4bf92f3577b34da6a3ce929d0e0e4736-");
+        assertThat(traceparent).doesNotContain("-00f067aa0ba902b7-", "el span es nuevo, no el del cliente");
+        assertThat(traceparent).endsWith("-01");
+    }
+
+    @Test
+    @DisplayName("Should generate a trace context when the client sends none")
+    void debeGenerarUnContextoDeTrazaCuandoElClienteNoMandaNinguno() {
+        RouteTarget target = new RouteTarget("fleet-service", "http://localhost:8083", 5000, true);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "GET",
+                "/api/v1/fleet/vehicles",
+                null,
+                Map.of(),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        when(reverseProxyPort.forward(any(OutboundRequest.class)))
+                .thenReturn(new ProxyResponse(200, Map.of(), new byte[0]));
+
+        routingService.route(inboundRequest, target, null, "traza");
+
+        ArgumentCaptor<OutboundRequest> captor = ArgumentCaptor.forClass(OutboundRequest.class);
+        verify(reverseProxyPort).forward(captor.capture());
+
+        String traceparent = captor.getValue().headers().get("traceparent").get(0);
+        assertThat(traceparent).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-01");
+    }
+
+    @Test
+    @DisplayName("Should not use an invalid traceparent of the client")
+    void noDebeUsarUnTraceparentInvalidoDelCliente() {
+        RouteTarget target = new RouteTarget("fleet-service", "http://localhost:8083", 5000, true);
+
+        InboundRequest inboundRequest = new InboundRequest(
+                "GET",
+                "/api/v1/fleet/vehicles",
+                null,
+                Map.of("traceparent", List.of("esto-no-es-un-traceparent")),
+                new byte[0],
+                "127.0.0.1"
+        );
+
+        when(reverseProxyPort.forward(any(OutboundRequest.class)))
+                .thenReturn(new ProxyResponse(200, Map.of(), new byte[0]));
+
+        routingService.route(inboundRequest, target, null, "traza");
+
+        ArgumentCaptor<OutboundRequest> captor = ArgumentCaptor.forClass(OutboundRequest.class);
+        verify(reverseProxyPort).forward(captor.capture());
+
+        assertThat(captor.getValue().headers().get("traceparent").get(0)).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-01");
     }
 }
