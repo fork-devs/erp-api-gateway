@@ -60,14 +60,21 @@ erp:
         timeout-ms: 500
       work-order-service:
         path-prefix: /api/v1/work-orders
-        target-url: ${WORK_ORDER_SERVICE_URL:http://localhost:8084}
+        # Puerto libre: el 8084 es el del servicio de inventario. El servicio
+        # de ordenes de trabajo todavia no existe.
+        target-url: ${WORK_ORDER_SERVICE_URL:http://localhost:8088}
         requires-auth: true
-        timeout-ms: 10000
+        # El plazo que fija el spec para las comunicaciones internas.
+        timeout-ms: 500
       inventory-service:
         path-prefix: /api/v1/inventory
-        target-url: ${INVENTORY_SERVICE_URL:http://localhost:8085}
+        # El servicio de inventario escucha en el 8084: la ruta apuntaba al
+        # 8085, que es el puerto del hub de integraciones, de modo que
+        # /api/v1/inventory no alcanzaba al inventario.
+        target-url: ${INVENTORY_SERVICE_URL:http://localhost:8084}
         requires-auth: true
-        timeout-ms: 10000
+        # El plazo que fija el spec para las comunicaciones internas.
+        timeout-ms: 500
       billing-service:
         path-prefix: /api/v1/billing
         target-url: ${BILLING_SERVICE_URL:http://localhost:8086}
