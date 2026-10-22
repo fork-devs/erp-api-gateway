@@ -2,25 +2,25 @@ package com.erp.apigateway.interfaces.rest.controller;
 
 import com.erp.apigateway.application.dto.InboundRequest;
 import com.erp.apigateway.application.logging.AccessEventLogger;
-import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.application.usecase.ExecuteBulkheadUseCase;
+import com.erp.apigateway.application.usecase.GetTenantQuotaUseCase;
+import com.erp.apigateway.application.usecase.ResolveRouteUseCase;
 import com.erp.apigateway.application.usecase.ExecuteRateLimitUseCase;
 import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
 import com.erp.apigateway.application.usecase.ValidateGatewayRequestUseCase;
 import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
+import com.erp.apigateway.domain.model.ProxyResponse;
 import com.erp.apigateway.domain.model.RateLimitResult;
 import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.TenantQuota;
 import com.erp.apigateway.domain.model.TokenClaims;
-import com.erp.apigateway.domain.port.TenantQuotaPort;
-import com.erp.apigateway.infrastructure.config.GatewayProperties;
-import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -43,46 +43,30 @@ public class GatewayDispatcherController {
 
     private static final Logger log = LoggerFactory.getLogger(GatewayDispatcherController.class);
 
-    /**
-     * Rutas que se sirven sin autenticacion.
-     *
-     * <p>Cada una tiene que existir en el servicio de destino. Una ruta
-     * declarada como publica que no existe no es un problema de seguridad
-     * (no hay nada que proteger), pero es un fallo de configuracion que no
-     * se ve: la peticion simplemente no encuentra nada.
-     */
-    private static final Set<String> PUBLIC_PATHS = Set.of(
-            "/api/v1/auth/login",
-            "/api/v1/auth/refresh",
-            "/api/v1/auth/forgot-password",
-            "/api/v1/auth/reset-password",
-            "/.well-known/jwks.json",
-            "/api/v1/plans"
-    );
 
-    private final GatewayProperties gatewayProperties;
     private final ValidateGatewayRequestUseCase validateGatewayRequestUseCase;
     private final ExecuteRateLimitUseCase executeRateLimitUseCase;
     private final ExecuteBulkheadUseCase executeBulkheadUseCase;
     private final RouteGatewayRequestUseCase routeGatewayRequestUseCase;
-    private final TenantQuotaPort tenantQuotaPort;
-    private final GatewayMetrics gatewayMetrics;
+    private final GetTenantQuotaUseCase getTenantQuotaUseCase;
+    private final ResolveRouteUseCase resolveRouteUseCase;
+    private final int maxInboundBodyBytes;
 
     public GatewayDispatcherController(
-            GatewayProperties gatewayProperties,
-            GatewayMetrics gatewayMetrics,
             ValidateGatewayRequestUseCase validateGatewayRequestUseCase,
             ExecuteRateLimitUseCase executeRateLimitUseCase,
             ExecuteBulkheadUseCase executeBulkheadUseCase,
             RouteGatewayRequestUseCase routeGatewayRequestUseCase,
-            TenantQuotaPort tenantQuotaPort) {
-        this.gatewayProperties = gatewayProperties;
+            GetTenantQuotaUseCase getTenantQuotaUseCase,
+            ResolveRouteUseCase resolveRouteUseCase,
+            @Value("${erp.gateway.max-inbound-body-bytes:1048576}") int maxInboundBodyBytes) {
         this.validateGatewayRequestUseCase = validateGatewayRequestUseCase;
         this.executeRateLimitUseCase = executeRateLimitUseCase;
         this.executeBulkheadUseCase = executeBulkheadUseCase;
         this.routeGatewayRequestUseCase = routeGatewayRequestUseCase;
-        this.tenantQuotaPort = tenantQuotaPort;
-        this.gatewayMetrics = gatewayMetrics;
+        this.getTenantQuotaUseCase = getTenantQuotaUseCase;
+        this.resolveRouteUseCase = resolveRouteUseCase;
+        this.maxInboundBodyBytes = maxInboundBodyBytes;
     }
 
     @RequestMapping(value = {"/api/v1/**", "/.well-known/**"})
@@ -99,13 +83,13 @@ public class GatewayDispatcherController {
         // El tope del cuerpo ENTRANTE: un cuerpo grande no debe llegar al
         // servicio de destino, ni ocupar la heap del borde mas alla de lo que
         // el codec ya ha acumulado (hallazgo 6.33).
-        if (body != null && body.length > gatewayProperties.getMaxInboundBodyBytes()) {
+        if (body != null && body.length > maxInboundBodyBytes) {
             throw new PayloadTooLargeException(
                     "El cuerpo de la peticion excede el maximo admitido por la pasarela ("
-                            + gatewayProperties.getMaxInboundBodyBytes() + " bytes)");
+                            + maxInboundBodyBytes + " bytes)");
         }
 
-        RouteTarget target = resolveTarget(path);
+        RouteTarget target = resolveRouteUseCase.resolve(path);
         if (target == null) {
             throw new TargetServiceUnavailableException("No existe ruta configurada en el gateway para el path: " + path);
         }
@@ -127,7 +111,7 @@ public class GatewayDispatcherController {
         UUID tenantId = claims != null ? claims.getTenantId() : null;
         RateLimitResult cuota = null;
         if (tenantId != null) {
-            TenantQuota quota = tenantQuotaPort.getQuota(tenantId, bearerTokenOf(inboundRequest));
+            TenantQuota quota = getTenantQuotaUseCase.getQuota(tenantId, bearerTokenOf(inboundRequest));
             cuota = executeRateLimitUseCase.evaluateRateLimit(tenantId, quota);
             executeBulkheadUseCase.acquireSlot(tenantId, quota.getMaxConcurrentSlots());
         }
@@ -156,8 +140,6 @@ public class GatewayDispatcherController {
             }
 
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000L;
-            gatewayMetrics.peticionAtendida(target.serviceName(), target.serviceName(), method,
-                    proxyResponse.statusCode(), Duration.ofMillis(duracionMs));
             AccessEventLogger.registrar(path, target.serviceName(), method, proxyResponse.statusCode(), duracionMs,
                     tenantId != null ? tenantId.toString() : null,
                     claims != null ? claims.getUserId().toString() : null,
@@ -174,55 +156,7 @@ public class GatewayDispatcherController {
         }
     }
 
-    private RouteTarget resolveTarget(String path) {
-        // 1. Verificar si coincide con alguna ruta configurada en application.yml
-        for (Map.Entry<String, GatewayProperties.ServiceRoute> entry : gatewayProperties.getRoutes().entrySet()) {
-            GatewayProperties.ServiceRoute route = entry.getValue();
-            if (path.startsWith(route.getPathPrefix())) {
-                boolean requiresAuth = route.isRequiresAuth() && !isPublicEndpoint(path);
-                return new RouteTarget(entry.getKey(), route.getTargetUrl(), route.getTimeoutMs(), requiresAuth,
-                        route.getRequiredRole(), route.isTenantFilterAllowed());
-            }
-        }
 
-        // 2. Rutas por defecto del ecosistema ERP
-        if (path.startsWith("/api/v1/auth") || path.startsWith("/.well-known")) {
-            boolean requiresAuth = !isPublicEndpoint(path);
-            // Ruta de ARRANQUE: el cliente declara el taller como filtro en el
-            // login, el refresco y el restablecimiento de contrasena.
-            return new RouteTarget("erp-auth-service", "http://localhost:8081", 10000, requiresAuth, null, true);
-        }
-        if (path.startsWith("/api/v1/tenants") || path.startsWith("/api/v1/plans")) {
-            boolean requiresAuth = !isPublicEndpoint(path);
-            return new RouteTarget("erp-tenant-service", gatewayProperties.getTenantServiceUrl(), 10000, requiresAuth);
-        }
-        if (path.startsWith("/api/v1/fleet")) {
-            return new RouteTarget("erp-fleet-service", "http://localhost:8083", 10000, true);
-        }
-        if (path.startsWith("/api/v1/work-orders")) {
-            return new RouteTarget("erp-work-order-service", "http://localhost:8084", 10000, true);
-        }
-        if (path.startsWith("/api/v1/inventory")) {
-            return new RouteTarget("erp-inventory-service", "http://localhost:8085", 10000, true);
-        }
-        if (path.startsWith("/api/v1/billing")) {
-            return new RouteTarget("erp-billing-service", "http://localhost:8086", 10000, true);
-        }
-        if (path.startsWith("/api/v1/telemetry")) {
-            return new RouteTarget("erp-telemetry-service", "http://localhost:8087", 10000, true);
-        }
-
-        return null;
-    }
-
-    private boolean isPublicEndpoint(String path) {
-        for (String publicPath : PUBLIC_PATHS) {
-            if (path.equalsIgnoreCase(publicPath) || path.startsWith(publicPath + "/")) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     /** Token del llamante, tal cual lo envio, para reenviarlo al destino. */
     private String bearerTokenOf(InboundRequest inboundRequest) {

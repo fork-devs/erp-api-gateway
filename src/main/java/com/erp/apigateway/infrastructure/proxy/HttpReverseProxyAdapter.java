@@ -1,10 +1,10 @@
 package com.erp.apigateway.infrastructure.proxy;
 
-import com.erp.apigateway.application.dto.OutboundRequest;
-import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.domain.exception.CircuitOpenException;
 import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.exception.TargetServiceUnavailableException;
+import com.erp.apigateway.domain.model.OutboundRequest;
+import com.erp.apigateway.domain.model.ProxyResponse;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
 import com.erp.apigateway.infrastructure.config.BodyLimits;
 import com.erp.apigateway.infrastructure.config.GatewayResilienceProperties;

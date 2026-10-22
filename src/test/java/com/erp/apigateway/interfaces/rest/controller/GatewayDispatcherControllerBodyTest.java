@@ -1,13 +1,14 @@
 package com.erp.apigateway.interfaces.rest.controller;
 
 import com.erp.apigateway.application.usecase.ExecuteBulkheadUseCase;
+import com.erp.apigateway.application.usecase.GetTenantQuotaUseCase;
+import com.erp.apigateway.application.usecase.ResolveRouteUseCase;
 import com.erp.apigateway.application.usecase.ExecuteRateLimitUseCase;
 import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
 import com.erp.apigateway.application.usecase.ValidateGatewayRequestUseCase;
 import com.erp.apigateway.domain.exception.PayloadTooLargeException;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.config.GatewayProperties;
-import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,7 +55,10 @@ class GatewayDispatcherControllerBodyTest {
     private TenantQuotaPort tenantQuotaPort;
 
     @Mock
-    private GatewayMetrics gatewayMetrics;
+    private GetTenantQuotaUseCase getTenantQuotaUseCase;
+
+    @Mock
+    private ResolveRouteUseCase resolveRouteUseCase;
 
     private GatewayProperties gatewayProperties;
     private GatewayDispatcherController controller;
@@ -64,13 +68,13 @@ class GatewayDispatcherControllerBodyTest {
         gatewayProperties = new GatewayProperties();
         gatewayProperties.setMaxInboundBodyBytes(1024);
         controller = new GatewayDispatcherController(
-                gatewayProperties,
-                gatewayMetrics,
                 validateGatewayRequestUseCase,
                 executeRateLimitUseCase,
                 executeBulkheadUseCase,
                 routeGatewayRequestUseCase,
-                tenantQuotaPort);
+                getTenantQuotaUseCase,
+                resolveRouteUseCase,
+                gatewayProperties.getMaxInboundBodyBytes());
     }
 
     @Test

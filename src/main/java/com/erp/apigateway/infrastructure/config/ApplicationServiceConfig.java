@@ -1,12 +1,17 @@
 package com.erp.apigateway.infrastructure.config;
 
 import com.erp.apigateway.application.service.GatewayBulkheadService;
+import com.erp.apigateway.application.service.GatewayQuotaService;
+import com.erp.apigateway.application.service.GatewayRouteResolver;
 import com.erp.apigateway.application.service.GatewayRateLimitingService;
 import com.erp.apigateway.application.service.GatewayRoutingService;
 import com.erp.apigateway.application.service.GatewaySecurityService;
+import com.erp.apigateway.application.usecase.GetTenantQuotaUseCase;
+import com.erp.apigateway.application.usecase.ResolveRouteUseCase;
 import com.erp.apigateway.domain.port.BulkheadPort;
 import com.erp.apigateway.domain.port.JwtValidatorPort;
 import com.erp.apigateway.domain.port.RateLimiterPort;
+import com.erp.apigateway.domain.port.RouteCatalogPort;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.bulkhead.SemaphoreBulkheadAdapter;
@@ -91,7 +96,19 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public GatewayRoutingService gatewayRoutingService(ReverseProxyPort reverseProxyPort) {
-        return new GatewayRoutingService(reverseProxyPort);
+    public GatewayRoutingService gatewayRoutingService(
+            ReverseProxyPort reverseProxyPort,
+            GatewayMetrics gatewayMetrics) {
+        return new GatewayRoutingService(reverseProxyPort, gatewayMetrics);
+    }
+
+    @Bean
+    public ResolveRouteUseCase resolveRouteUseCase(RouteCatalogPort routeCatalogPort) {
+        return new GatewayRouteResolver(routeCatalogPort);
+    }
+
+    @Bean
+    public GetTenantQuotaUseCase getTenantQuotaUseCase(TenantQuotaPort tenantQuotaPort) {
+        return new GatewayQuotaService(tenantQuotaPort);
     }
 }

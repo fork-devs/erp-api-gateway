@@ -1,5 +1,6 @@
 package com.erp.apigateway.infrastructure.metrics;
 
+import com.erp.apigateway.domain.port.GatewayMetricsPort;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
@@ -19,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * nunca un identificador de peticion ni de taller, que harian exploding el
  * numero de series.
  */
-public class GatewayMetrics {
+public class GatewayMetrics implements GatewayMetricsPort {
 
     private final MeterRegistry registry;
     private final Map<String, Timer> temporizadores = new ConcurrentHashMap<>();
@@ -32,6 +33,7 @@ public class GatewayMetrics {
     /**
      * Registra una peticion atendida por una ruta.
      */
+    @Override
     public void peticionAtendida(String ruta, String servicio, String metodo, int estado, Duration duracion) {
         Timer temporizador = temporizadores.computeIfAbsent(
                 ruta + "|" + servicio + "|" + metodo + "|" + estado,
@@ -63,6 +65,7 @@ public class GatewayMetrics {
      * abierto. Publicarlo permite ver, en un panel, cuantos destinos estan
      * aislando fallos.
      */
+    @Override
     public void estadoDelCircuito(String destino, String estado) {
         double valor = switch (estado) {
             case "OPEN" -> 1d;
@@ -78,6 +81,7 @@ public class GatewayMetrics {
     /**
      * Registra el fallo de un destino, con el error que lo produjo.
      */
+    @Override
     public void falloDeDestino(String destino, String errorCode) {
         registry.counter("gateway.destination.errors", Tags.of(
                 "destino", destino,

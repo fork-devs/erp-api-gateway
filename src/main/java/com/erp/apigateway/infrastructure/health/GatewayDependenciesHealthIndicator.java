@@ -1,11 +1,14 @@
 package com.erp.apigateway.infrastructure.health;
 
+import com.erp.apigateway.domain.port.EdgeHealthPort;
 import com.erp.apigateway.infrastructure.config.GatewayProperties;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
+import org.springframework.boot.health.contributor.Status;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.util.Map;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -19,7 +22,7 @@ import java.time.Duration;
  * todo en pie (hallazgo 6.37).
  */
 @Component("gatewayDependencies")
-public class GatewayDependenciesHealthIndicator implements HealthIndicator {
+public class GatewayDependenciesHealthIndicator implements HealthIndicator, EdgeHealthPort {
 
     private final GatewayProperties gatewayProperties;
     private final HttpClient httpClient;
@@ -29,6 +32,16 @@ public class GatewayDependenciesHealthIndicator implements HealthIndicator {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))
                 .build();
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return health().getStatus() == Status.UP;
+    }
+
+    @Override
+    public Map<String, Object> details() {
+        return health().getDetails();
     }
 
     @Override

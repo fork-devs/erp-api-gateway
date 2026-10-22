@@ -1,8 +1,8 @@
 package com.erp.apigateway.application;
 
 import com.erp.apigateway.application.dto.InboundRequest;
-import com.erp.apigateway.application.dto.OutboundRequest;
-import com.erp.apigateway.application.dto.ProxyResponse;
+import com.erp.apigateway.domain.model.OutboundRequest;
+import com.erp.apigateway.domain.model.ProxyResponse;
 import com.erp.apigateway.application.service.GatewayRoutingService;
 import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
 import com.erp.apigateway.domain.model.RouteTarget;

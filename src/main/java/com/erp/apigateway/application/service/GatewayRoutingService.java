@@ -1,14 +1,16 @@
 package com.erp.apigateway.application.service;
 
 import com.erp.apigateway.application.dto.InboundRequest;
-import com.erp.apigateway.application.dto.OutboundRequest;
-import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
 import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
+import com.erp.apigateway.domain.model.OutboundRequest;
+import com.erp.apigateway.domain.model.ProxyResponse;
 import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.TokenClaims;
+import com.erp.apigateway.domain.port.GatewayMetricsPort;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,9 +48,15 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
     );
 
     private final ReverseProxyPort reverseProxyPort;
+    private final GatewayMetricsPort gatewayMetricsPort;
 
     public GatewayRoutingService(ReverseProxyPort reverseProxyPort) {
+        this(reverseProxyPort, null);
+    }
+
+    public GatewayRoutingService(ReverseProxyPort reverseProxyPort, GatewayMetricsPort gatewayMetricsPort) {
         this.reverseProxyPort = reverseProxyPort;
+        this.gatewayMetricsPort = gatewayMetricsPort;
     }
 
     @Override
@@ -103,7 +111,22 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
                 target.timeoutMs()
         );
 
-        return reverseProxyPort.forward(outboundRequest);
+        long inicio = System.nanoTime();
+        try {
+            ProxyResponse respuesta = reverseProxyPort.forward(outboundRequest);
+            if (gatewayMetricsPort != null) {
+                gatewayMetricsPort.peticionAtendida(target.serviceName(), target.serviceName(),
+                        inboundRequest.method(), respuesta.statusCode(),
+                        Duration.ofNanos(System.nanoTime() - inicio));
+            }
+            return respuesta;
+        } catch (RuntimeException ex) {
+            if (gatewayMetricsPort != null) {
+                gatewayMetricsPort.peticionAtendida(target.serviceName(), target.serviceName(),
+                        inboundRequest.method(), 502, Duration.ofNanos(System.nanoTime() - inicio));
+            }
+            throw ex;
+        }
     }
 
     /**

@@ -1,10 +1,8 @@
 package com.erp.apigateway.interfaces.rest.controller;
 
-import com.erp.apigateway.infrastructure.health.GatewayDependenciesHealthIndicator;
+import com.erp.apigateway.domain.port.EdgeHealthPort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.boot.health.contributor.Health;
-import org.springframework.boot.health.contributor.Status;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,17 +25,16 @@ import java.util.Map;
 public class GatewayHealthController {
 
     private final Instant startTime = Instant.now();
-    private final GatewayDependenciesHealthIndicator dependenciesHealthIndicator;
+    private final EdgeHealthPort edgeHealthPort;
 
-    public GatewayHealthController(GatewayDependenciesHealthIndicator dependenciesHealthIndicator) {
-        this.dependenciesHealthIndicator = dependenciesHealthIndicator;
+    public GatewayHealthController(EdgeHealthPort edgeHealthPort) {
+        this.edgeHealthPort = edgeHealthPort;
     }
 
     @GetMapping("/status")
     @Operation(summary = "Consultar el estado del API Gateway")
     public ResponseEntity<Map<String, Object>> getStatus() {
-        Health salud = dependenciesHealthIndicator.health();
-        boolean arriba = salud.getStatus() == Status.UP;
+        boolean arriba = edgeHealthPort.isAvailable();
 
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("status", arriba ? "UP" : "DOWN");
@@ -46,7 +43,7 @@ public class GatewayHealthController {
         respuesta.put("startedAt", startTime.toString());
         respuesta.put("timestamp", Instant.now().toString());
         respuesta.put("mode", "Multi-Tenant Perimeter Guardian");
-        respuesta.put("dependencies", salud.getDetails());
+        respuesta.put("dependencies", edgeHealthPort.details());
 
         return ResponseEntity.status(arriba ? 200 : 503).body(respuesta);
     }

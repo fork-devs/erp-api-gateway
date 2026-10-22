@@ -1,17 +1,19 @@
 package com.erp.apigateway.interfaces.rest.controller;
 
-import com.erp.apigateway.application.dto.ProxyResponse;
+import com.erp.apigateway.domain.model.ProxyResponse;
 import com.erp.apigateway.application.usecase.ExecuteBulkheadUseCase;
+import com.erp.apigateway.application.usecase.GetTenantQuotaUseCase;
+import com.erp.apigateway.application.usecase.ResolveRouteUseCase;
 import com.erp.apigateway.application.usecase.ExecuteRateLimitUseCase;
 import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
 import com.erp.apigateway.application.usecase.ValidateGatewayRequestUseCase;
 import com.erp.apigateway.domain.model.BulkheadResult;
+import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.RateLimitResult;
 import com.erp.apigateway.domain.model.TenantQuota;
 import com.erp.apigateway.domain.model.TokenClaims;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.config.GatewayProperties;
-import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -61,7 +63,10 @@ class GatewayDispatcherControllerQuotaTest {
     private TenantQuotaPort tenantQuotaPort;
 
     @Mock
-    private GatewayMetrics gatewayMetrics;
+    private GetTenantQuotaUseCase getTenantQuotaUseCase;
+
+    @Mock
+    private ResolveRouteUseCase resolveRouteUseCase;
 
     private GatewayDispatcherController controller;
 
@@ -72,13 +77,13 @@ class GatewayDispatcherControllerQuotaTest {
                 new GatewayProperties.ServiceRoute("/api/v1/fleet", "http://localhost:8083", true, 500));
 
         controller = new GatewayDispatcherController(
-                gatewayProperties,
-                gatewayMetrics,
                 validateGatewayRequestUseCase,
                 executeRateLimitUseCase,
                 executeBulkheadUseCase,
                 routeGatewayRequestUseCase,
-                tenantQuotaPort);
+                getTenantQuotaUseCase,
+                resolveRouteUseCase,
+                gatewayProperties.getMaxInboundBodyBytes());
     }
 
     @Test
@@ -93,7 +98,9 @@ class GatewayDispatcherControllerQuotaTest {
         when(request.getMethod()).thenReturn("GET");
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");
         when(validateGatewayRequestUseCase.validateRequest(any(), any())).thenReturn(claims);
-        when(tenantQuotaPort.getQuota(any(), any())).thenReturn(new TenantQuota(tenantId, "ACTIVE", "PRO", 500, 40));
+        when(resolveRouteUseCase.resolve(any())).thenReturn(
+                new RouteTarget("fleet-service", "http://localhost:8083", 500, true));
+        when(getTenantQuotaUseCase.getQuota(any(), any())).thenReturn(new TenantQuota(tenantId, "ACTIVE", "PRO", 500, 40));
         when(executeRateLimitUseCase.evaluateRateLimit(any(), any())).thenReturn(RateLimitResult.allowed(497, 500, 30));
         when(executeBulkheadUseCase.acquireSlot(any(), any(int.class))).thenReturn(BulkheadResult.success(1, 40));
         when(routeGatewayRequestUseCase.route(any(), any(), any(), any()))
