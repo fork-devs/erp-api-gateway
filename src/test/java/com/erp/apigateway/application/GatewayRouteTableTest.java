@@ -132,6 +132,38 @@ class GatewayRouteTableTest {
         return (Map<String, Object>) gateway.get("routes");
     }
 
+    @Test
+    @DisplayName("La ruta de inventory apunta al servicio de inventario, con el plazo del spec")
+    void laRutaDeInventoryApuntaAlServicioDeInventory() {
+        Map<String, Object> rutas = rutasDelYaml();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inventory = (Map<String, Object>) rutas.get("inventory-service");
+
+        assertNotNull(inventory, "La tabla de rutas debe incluir /api/v1/inventory");
+        assertEquals("/api/v1/inventory", inventory.get("path-prefix"),
+                "El prefijo del gateway es la ruta del servicio: el inventario lo publica bajo ese prefijo");
+        assertTrue(String.valueOf(inventory.get("target-url")).contains("8084"),
+                "El servicio de inventario escucha en el 8084: la ruta apuntaba al 8085, que es el del hub");
+        assertEquals(Boolean.TRUE, inventory.get("requires-auth"),
+                "La gestion de stock exige autenticacion");
+        assertEquals(500, inventory.get("timeout-ms"),
+                "El plazo de las comunicaciones internas es de 500 ms");
+    }
+
+    @Test
+    @DisplayName("La ruta de work-orders ocupa un puerto libre")
+    void laRutaDeWorkOrdersOcupaUnPuertoLibre() {
+        Map<String, Object> rutas = rutasDelYaml();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workOrders = (Map<String, Object>) rutas.get("work-order-service");
+
+        assertNotNull(workOrders, "La tabla de rutas debe incluir /api/v1/work-orders");
+        assertTrue(String.valueOf(workOrders.get("target-url")).contains("8088"),
+                "El 8084 es el del inventario: el servicio de ordenes de trabajo ocupa el 8088");
+    }
+
     /**
      * Ruta que sirve una operacion: la de prefijo mas largo que encaja. La
      * de prefijo exacto es un caso particular.
