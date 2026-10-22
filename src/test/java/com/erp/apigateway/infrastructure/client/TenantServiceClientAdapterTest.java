@@ -1,5 +1,6 @@
 package com.erp.apigateway.infrastructure.client;
 
+import com.erp.apigateway.domain.exception.TenantStatusUnavailableException;
 import com.erp.apigateway.domain.model.TenantQuota;
 import com.erp.apigateway.infrastructure.config.GatewayProperties;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,7 +13,9 @@ import org.springframework.web.client.RestClient;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -113,6 +116,22 @@ class TenantServiceClientAdapterTest {
 
         assertThat(cuota.getMaxReqPerMin()).isEqualTo(TenantServiceClientAdapter.LIMITE_POR_DEFECTO_POR_MINUTO);
         assertThat(cuota.getMaxConcurrentSlots()).isEqualTo(TenantServiceClientAdapter.LIMITE_POR_DEFECTO_CONCURRENTES);
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("Should fail closed when the tenant status cannot be determined")
+    void debeFallarCerradoCuandoNoSePuedeDeterminarElEstadoDelTaller() {
+        // Un taller SUSPENDIDO no puede volver a operar porque el
+        // tenant-service no responda: el borde falla cerrado (hallazgo 6.31).
+        UUID tenantId = UUID.randomUUID();
+        server.expect(requestTo("http://tenant-service.test/api/v1/internal/tenants/" + tenantId + "/limits"))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> adapter.getQuota(tenantId, "token-del-llamante"))
+                .isInstanceOf(TenantStatusUnavailableException.class)
+                .hasMessageContaining("estado del taller");
+
         server.verify();
     }
 }

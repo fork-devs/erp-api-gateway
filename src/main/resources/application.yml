@@ -38,6 +38,10 @@ erp:
         path-prefix: /api/v1/auth
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
+        # Ruta de ARRANQUE: en el login, el refresco y el
+        # restablecimiento de contrasena el cliente declara el taller como
+        # filtro. Viaja como una PISTA, que el destino contrasta con el token.
+        tenant-filter-allowed: true
         timeout-ms: 10000
       users-service:
         path-prefix: /api/v1/users

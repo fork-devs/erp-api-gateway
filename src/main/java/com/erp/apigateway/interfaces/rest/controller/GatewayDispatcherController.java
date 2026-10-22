@@ -146,14 +146,16 @@ public class GatewayDispatcherController {
             if (path.startsWith(route.getPathPrefix())) {
                 boolean requiresAuth = route.isRequiresAuth() && !isPublicEndpoint(path);
                 return new RouteTarget(entry.getKey(), route.getTargetUrl(), route.getTimeoutMs(), requiresAuth,
-                        route.getRequiredRole());
+                        route.getRequiredRole(), route.isTenantFilterAllowed());
             }
         }
 
         // 2. Rutas por defecto del ecosistema ERP
         if (path.startsWith("/api/v1/auth") || path.startsWith("/.well-known")) {
             boolean requiresAuth = !isPublicEndpoint(path);
-            return new RouteTarget("erp-auth-service", "http://localhost:8081", 10000, requiresAuth);
+            // Ruta de ARRANQUE: el cliente declara el taller como filtro en el
+            // login, el refresco y el restablecimiento de contrasena.
+            return new RouteTarget("erp-auth-service", "http://localhost:8081", 10000, requiresAuth, null, true);
         }
         if (path.startsWith("/api/v1/tenants") || path.startsWith("/api/v1/plans")) {
             boolean requiresAuth = !isPublicEndpoint(path);

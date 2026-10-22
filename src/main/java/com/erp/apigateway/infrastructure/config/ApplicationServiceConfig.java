@@ -20,6 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.web.client.RestClient;
 
 @Configuration
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -41,8 +42,10 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public TenantQuotaPort tenantQuotaPort(GatewayProperties gatewayProperties) {
-        return new TenantServiceClientAdapter(gatewayProperties);
+    public TenantQuotaPort tenantQuotaPort(GatewayProperties gatewayProperties, RestClient.Builder restClientBuilder) {
+        // El builder auto-configurado es el que trae los timeouts: con uno
+        // propio, un tenant-service colgado bloqueaba el hilo (6.31).
+        return new TenantServiceClientAdapter(gatewayProperties, restClientBuilder);
     }
 
     @Bean

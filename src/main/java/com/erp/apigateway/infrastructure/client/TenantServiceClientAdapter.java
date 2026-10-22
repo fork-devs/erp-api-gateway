@@ -1,5 +1,6 @@
 package com.erp.apigateway.infrastructure.client;
 
+import com.erp.apigateway.domain.exception.TenantStatusUnavailableException;
 import com.erp.apigateway.domain.model.TenantQuota;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.client.dto.TenantLimitsDto;
@@ -31,8 +32,16 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
     private final Cache<UUID, TenantQuota> quotaCache;
 
     public TenantServiceClientAdapter(GatewayProperties gatewayProperties) {
+        this(gatewayProperties, RestClient.builder());
+    }
+
+    public TenantServiceClientAdapter(GatewayProperties gatewayProperties, RestClient.Builder restClientBuilder) {
         this.gatewayProperties = gatewayProperties;
-        this.restClient = RestClient.builder().build();
+        // El cliente se construye con el builder AUTO-CONFIGURADO, que es el
+        // unico que trae los timeouts de conexion y de lectura. Con un
+        // builder propio, un tenant-service colgado bloqueaba el hilo
+        // indefinidamente (hallazgo 6.31).
+        this.restClient = restClientBuilder.build();
         this.quotaCache = Caffeine.newBuilder()
                 .expireAfterWrite(Duration.ofMinutes(1))
                 .maximumSize(5000)
@@ -90,10 +99,18 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
                 );
             }
         } catch (Exception e) {
-            log.warn("No se pudo obtener la cuota del tenant {} desde {}: {}. Usando cuota por defecto.", tenantId, url, e.getMessage());
+            // Modo CERRADO: si no se puede determinar el estado del taller, la
+            // peticion se rechaza. Devolver una cuota por defecto con estado
+            // ACTIVE hacia que un taller SUSPENDIDO volviera a operar con
+            // normalidad cada vez que el tenant-service no respondia
+            // (hallazgo 6.31).
+            log.warn("No se pudo determinar el estado del tenant {} desde {}: {}", tenantId, url, e.getMessage());
+            throw new TenantStatusUnavailableException(
+                    "No se pudo determinar el estado del taller: " + e.getMessage(), e);
         }
 
-        return TenantQuota.createDefault(tenantId, "BASICO");
+        throw new TenantStatusUnavailableException(
+                "El servicio de talleres no devolvio los limites del taller " + tenantId);
     }
 
     /**

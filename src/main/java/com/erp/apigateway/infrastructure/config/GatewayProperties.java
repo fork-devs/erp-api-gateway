@@ -29,6 +29,16 @@ public class GatewayProperties {
          * servicio de destino.
          */
         private String requiredRole;
+        /**
+         * Ruta de ARRANQUE (login, refresco, restablecimiento): el cliente
+         * declara el taller como filtro porque la consulta por hash ocurre
+         * antes de conocer la fila. El valor viaja al destino como una
+         * PISTA, que el destino contrasta con el token.
+         *
+         * <p>En cualquier otra ruta, la cabecera de identidad del cliente se
+         * descarta (hallazgo 6.30).
+         */
+        private boolean tenantFilterAllowed = false;
 
         public ServiceRoute() {}
 
@@ -45,6 +55,14 @@ public class GatewayProperties {
 
         public void setRequiredRole(String requiredRole) {
             this.requiredRole = requiredRole;
+        }
+
+        public boolean isTenantFilterAllowed() {
+            return tenantFilterAllowed;
+        }
+
+        public void setTenantFilterAllowed(boolean tenantFilterAllowed) {
+            this.tenantFilterAllowed = tenantFilterAllowed;
         }
 
         public String getPathPrefix() {

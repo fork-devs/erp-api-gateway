@@ -4,6 +4,7 @@ import com.erp.apigateway.application.dto.InboundRequest;
 import com.erp.apigateway.application.dto.OutboundRequest;
 import com.erp.apigateway.application.dto.ProxyResponse;
 import com.erp.apigateway.application.usecase.RouteGatewayRequestUseCase;
+import com.erp.apigateway.domain.exception.InvalidTenantFilterException;
 import com.erp.apigateway.domain.model.RouteTarget;
 import com.erp.apigateway.domain.model.TokenClaims;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
@@ -29,6 +30,21 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
             "host"
     );
 
+    /**
+     * Cabeceras de IDENTIDAD que el cliente puede intentar inyectar.
+     *
+     * <p>Nunca se reenvian tal cual: en las rutas autenticadas las pone el
+     * gateway desde los claims verificados del token, y en las publicas no se
+     * reenvian. Sin esto, un destino que confiera en el gateway tendria un
+     * vector de suplantacion de identidad (hallazgo 6.30).
+     */
+    private static final Set<String> IDENTITY_HEADERS = Set.of(
+            "x-user-id",
+            "x-user-role",
+            "x-user-email",
+            "x-tenant-id"
+    );
+
     private final ReverseProxyPort reverseProxyPort;
 
     public GatewayRoutingService(ReverseProxyPort reverseProxyPort) {
@@ -41,10 +57,11 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
 
         Map<String, List<String>> outboundHeaders = new HashMap<>();
 
-        // 1. Copiar cabeceras originales excluyendo hop-by-hop
+        // 1. Copiar cabeceras originales excluyendo hop-by-hop y las de
+        // identidad, que las repone el gateway con datos verificados.
         for (Map.Entry<String, List<String>> entry : inboundRequest.headers().entrySet()) {
             String lowerKey = entry.getKey().toLowerCase();
-            if (!HOP_BY_HOP_HEADERS.contains(lowerKey)) {
+            if (!HOP_BY_HOP_HEADERS.contains(lowerKey) && !IDENTITY_HEADERS.contains(lowerKey)) {
                 outboundHeaders.put(entry.getKey(), new ArrayList<>(entry.getValue()));
             }
         }
@@ -66,6 +83,14 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
             // aplicando el primero.
             outboundHeaders.put("X-User-Role", List.copyOf(claims.getRoles()));
             outboundHeaders.put("X-User-Email", List.of(claims.getEmail()));
+        } else if (target.tenantFilterAllowed()) {
+            // 4. Ruta de ARRANQUE: el cliente declara el taller como filtro.
+            // Viaja como una PISTA (el destino la contrasta con el token) y
+            // solo si tiene forma de identificador.
+            String filtro = filtroDeTallerDelCliente(inboundRequest);
+            if (filtro != null) {
+                outboundHeaders.put("X-Tenant-ID", List.of(filtro));
+            }
         }
 
         OutboundRequest outboundRequest = new OutboundRequest(
@@ -77,6 +102,27 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
         );
 
         return reverseProxyPort.forward(outboundRequest);
+    }
+
+    /**
+     * Filtro de taller declarado por el cliente en una ruta de arranque.
+     *
+     * <p>Se valida la FORMA: un filtro que no es un identificador no se
+     * reenvia, porque el destino lo usaria como criterio de busqueda y el
+     * valor no identifica a nadie.
+     */
+    private String filtroDeTallerDelCliente(InboundRequest inboundRequest) {
+        String filtro = inboundRequest.getFirstHeader("X-Tenant-ID");
+        if (filtro == null || filtro.isBlank()) {
+            return null;
+        }
+        String limpio = filtro.trim();
+        try {
+            return UUID.fromString(limpio).toString();
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidTenantFilterException(
+                    "El filtro de taller declarado no tiene forma de identificador");
+        }
     }
 
     private String buildTargetUrl(String baseUrl, String path, String queryString) {

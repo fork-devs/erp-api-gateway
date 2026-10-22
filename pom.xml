@@ -42,6 +42,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!--
+            Cliente HTTP auto-configurado: aporta el RestClient.Builder con
+            los timeouts de spring.http.client.*, que es lo que impide que un
+            tenant-service colgado bloquee el hilo (hallazgo 6.31).
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
 
         <!--
             Interruptor de circuito y de tiempo, POR DESTINO, en el puerto de
