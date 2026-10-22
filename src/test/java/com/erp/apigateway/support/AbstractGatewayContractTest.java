@@ -1,7 +1,6 @@
 package com.erp.apigateway.support;
 
 import com.erp.apigateway.domain.model.TenantQuota;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -45,6 +44,8 @@ public abstract class AbstractGatewayContractTest {
     protected static final int PUERTO_TALLERES = 8082;
     protected static final int PUERTO_FLEET = 8083;
     protected static final int PUERTO_INVENTARIO = 8084;
+    protected static final int PUERTO_TELEMETRIA = 8087;
+    protected static final int PUERTO_ORDENES = 8088;
 
     /** Emisor de identidades: sirve el conjunto de claves en el puerto del auth-service. */
     protected static final TestIdentityServer IDENTIDAD;
@@ -54,6 +55,10 @@ public abstract class AbstractGatewayContractTest {
     protected static final StubService DESTINO_INVENTARIO;
     /** Servicio de talleres: del que el borde obtiene la cuota y el estado. */
     protected static final StubService SERVICIO_DE_TALLERES;
+    /** Destino de las rutas de telemetría. */
+    protected static final StubService DESTINO_TELEMETRIA;
+    /** Destino de las rutas de ordenes de trabajo. */
+    protected static final StubService DESTINO_ORDENES;
 
     static {
         try {
@@ -61,34 +66,44 @@ public abstract class AbstractGatewayContractTest {
             DESTINO = StubService.arrancar(PUERTO_FLEET);
             DESTINO_INVENTARIO = StubService.arrancar(PUERTO_INVENTARIO);
             SERVICIO_DE_TALLERES = StubService.arrancar(PUERTO_TALLERES);
+            DESTINO_TELEMETRIA = StubService.arrancar(PUERTO_TELEMETRIA);
+            DESTINO_ORDENES = StubService.arrancar(PUERTO_ORDENES);
         } catch (Exception ex) {
             throw new IllegalStateException("No se pudieron arrancar los servicios de test", ex);
         }
+
+        // Los stubs se detienen al terminar la JVM, NO al terminar una clase
+        // de test: son compartidos, y pararlos en el primer @AfterAll dejaba
+        // al resto de clases sin destino.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            IDENTIDAD.detener();
+            DESTINO.detener();
+            DESTINO_INVENTARIO.detener();
+            DESTINO_TELEMETRIA.detener();
+            DESTINO_ORDENES.detener();
+            SERVICIO_DE_TALLERES.detener();
+        }));
     }
 
     @DynamicPropertySource
     static void propiedadesDeTest(DynamicPropertyRegistry registro) {
-        registro.add("erp.gateway.jwks-url", IDENTIDAD::jwksUrl);
-        // Los DESTINOS se sustituyen por los marcadores de posicion que ya
-        // tiene la tabla de rutas, en vez de sobreescribir una entrada del
-        // mapa: sobreescribir una entrada desde una fuente de mayor
-        // precedencia REEMPLAZA el mapa entero, y las rutas se quedan sin
-        // prefijo. Asi la tabla de rutas sigue siendo la de produccion.
-        registro.add("AUTH_SERVICE_URL", DESTINO::url);
-        registro.add("FLEET_SERVICE_URL", DESTINO::url);
-        registro.add("WORK_ORDER_SERVICE_URL", DESTINO::url);
-        registro.add("INVENTORY_SERVICE_URL", DESTINO::url);
-        registro.add("BILLING_SERVICE_URL", DESTINO::url);
-        registro.add("TELEMETRY_SERVICE_URL", DESTINO::url);
-        registro.add("TENANT_SERVICE_URL", SERVICIO_DE_TALLERES::url);
+        // El emisor de identidades se sirve en el puerto del auth-service, que
+        // es donde la configuracion de produccion espera el conjunto de
+        // claves: no hay que sobreescribir la tabla de rutas.
+        registro.add("JWKS_URL", IDENTIDAD::jwksUrl);
         // Un circuito que se abre rapido, para poder comprobarlo sin esperar.
         registro.add("erp.gateway.resilience.circuit-breaker.defaults.minimum-number-of-calls", () -> 2);
         registro.add("erp.gateway.resilience.circuit-breaker.defaults.sliding-window-size", () -> 2);
         registro.add("erp.gateway.resilience.circuit-breaker.defaults.failure-rate-threshold", () -> 50f);
         registro.add("erp.gateway.resilience.circuit-breaker.defaults.wait-duration-in-open-state", () -> "1s");
-        // Cuotas amplias por defecto: cada test decide las suyas.
-        registro.add("erp.gateway.max-inbound-body-bytes", () -> 1024);
-        registro.add("erp.gateway.max-outbound-body-bytes", () -> 2048);
+        // Un pool de hilos de plataforma DELIBERADAMENTE pequeno: con 20
+        // hilos, una rafaga de 100 peticiones concurrentes demuestra que el
+        // techo del borde ya no son los hilos de plataforma (hallazgo 6.56).
+        registro.add("server.tomcat.threads.max", () -> 20);
+        // Topes del cuerpo para los tests: los marcadores de posicion son los
+        // que declara la configuracion de produccion.
+        registro.add("MAX_INBOUND_BODY_BYTES", () -> 1024);
+        registro.add("MAX_OUTBOUND_BODY_BYTES", () -> 2048);
     }
 
     @LocalServerPort
@@ -106,21 +121,20 @@ public abstract class AbstractGatewayContractTest {
     void limpiarDestinos() {
         DESTINO.limpiar();
         DESTINO_INVENTARIO.limpiar();
+        DESTINO_TELEMETRIA.limpiar();
+        DESTINO_ORDENES.limpiar();
         SERVICIO_DE_TALLERES.limpiar();
         DESTINO.responderCon(200, "{\"ok\":true}");
         DESTINO.retardar(0);
         DESTINO_INVENTARIO.responderCon(200, "{\"ok\":true}");
         DESTINO_INVENTARIO.retardar(0);
+        DESTINO_TELEMETRIA.responderCon(200, "{\"ok\":true}");
+        DESTINO_TELEMETRIA.retardar(0);
+        DESTINO_ORDENES.responderCon(200, "{\"ok\":true}");
+        DESTINO_ORDENES.retardar(0);
         SERVICIO_DE_TALLERES.responderCon(200, cuerpoDeLimites("ACTIVE", "PRO", 500, 40));
     }
 
-    @AfterAll
-    static void detenerServicios() {
-        IDENTIDAD.detener();
-        DESTINO.detener();
-        DESTINO_INVENTARIO.detener();
-        SERVICIO_DE_TALLERES.detener();
-    }
 
     /**
      * Cuerpo de la respuesta de limites del taller.

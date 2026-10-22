@@ -143,6 +143,19 @@
                 </executions>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                        Una JVM por clase de test. El interruptor de circuito
+                        del borde vive en el proceso: si dos clases comparten
+                        JVM, la que abre el circuito de un destino afecta a la
+                        otra. Aislando, cada clase parte de un estado limpio.
+                    -->
+                    <reuseForks>false</reuseForks>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>

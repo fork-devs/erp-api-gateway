@@ -2,6 +2,7 @@ package com.erp.apigateway.infrastructure.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,6 +22,13 @@ public class GatewayProperties {
      */
     private int maxInboundBodyBytes = BodyLimits.DEFAULT_INBOUND_BYTES;
     private int maxOutboundBodyBytes = BodyLimits.DEFAULT_OUTBOUND_BYTES;
+
+    /**
+     * Tiempo que se guarda la cuota y el estado del taller antes de volver a
+     * consultar al servicio de talleres. Es la ventana en la que un cambio de
+     * plan NO se ve, asi que es corta a proposito.
+     */
+    private Duration tenantQuotaCacheTtl = Duration.ofMinutes(1);
 
     public static class ServiceRoute {
         private String pathPrefix;
@@ -151,6 +159,14 @@ public class GatewayProperties {
 
     public void setMaxOutboundBodyBytes(int maxOutboundBodyBytes) {
         this.maxOutboundBodyBytes = maxOutboundBodyBytes;
+    }
+
+    public Duration getTenantQuotaCacheTtl() {
+        return tenantQuotaCacheTtl;
+    }
+
+    public void setTenantQuotaCacheTtl(Duration tenantQuotaCacheTtl) {
+        this.tenantQuotaCacheTtl = tenantQuotaCacheTtl;
     }
 
     public BodyLimits bodyLimits() {

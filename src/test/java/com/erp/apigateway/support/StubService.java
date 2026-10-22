@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -42,9 +43,17 @@ public final class StubService {
      * la configuracion que se prueba es la de verdad.
      */
     public static StubService arrancar(int puerto) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", puerto), 0);
+        // Un backlog amplio: con cientos de conexiones a la vez, una cola de
+        // espera corta hace que el servidor de test sea el cuello de botella
+        // y que los tiempos de espera parezcan fallos del borde.
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", puerto), 512);
         StubService stub = new StubService(server);
         server.createContext("/", stub::responder);
+        // El servidor por defecto atiende las peticiones en el hilo que las
+        // acepta: con conexiones persistentes (keep-alive) se queda bloqueado
+        // con la primera y las siguientes fallan. Con un pool, el destino
+        // aguanta la concurrencia que se le pide.
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         return stub;
     }

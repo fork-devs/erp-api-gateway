@@ -43,7 +43,7 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
         // indefinidamente (hallazgo 6.31).
         this.restClient = restClientBuilder.build();
         this.quotaCache = Caffeine.newBuilder()
-                .expireAfterWrite(Duration.ofMinutes(1))
+                .expireAfterWrite(gatewayProperties.getTenantQuotaCacheTtl())
                 .maximumSize(5000)
                 .build();
     }
@@ -52,7 +52,7 @@ public class TenantServiceClientAdapter implements TenantQuotaPort {
         this.gatewayProperties = gatewayProperties;
         this.restClient = restClient;
         this.quotaCache = Caffeine.newBuilder()
-                .expireAfterWrite(Duration.ofMinutes(1))
+                .expireAfterWrite(gatewayProperties.getTenantQuotaCacheTtl())
                 .maximumSize(5000)
                 .build();
     }
