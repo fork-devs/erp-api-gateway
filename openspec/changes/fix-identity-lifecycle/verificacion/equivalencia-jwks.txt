@@ -1,0 +1,39 @@
+=== Equivalencia del cliente del conjunto de claves (fix-identity-lifecycle, task 6.6) ===
+Generado: 2026-10-21
+
+El gateway y el hub tienen una COPIA del cliente del conjunto de claves: cada
+servicio es un repositorio independiente y no hay todavia una biblioteca
+compartida entre ellos. La copia es un riesgo: las dos pueden divergir sin
+que nadie se entere.
+
+--- Comprobacion ---
+    $ python3 docs/verificar-equivalencia-jwks.py
+    [OK]    JwksKeyManager.java es identico en gateway y hub
+    [OK]    JwksUrlPolicy.java es identico en gateway y hub
+    [OK]    JwksKeyManagerTest.java es identico en gateway y hub
+
+    Las copias del cliente del conjunto de claves son equivalentes.
+    exit = 0
+
+--- La comprobacion FALLA si una de las dos deja de comportarse como la otra ---
+Se cambio el intervalo de reintento del hub de 10 a 60 segundos, de modo que
+las dos copias divergieran:
+
+    [FALLO] JwksKeyManager.java DIVERGE entre el gateway y el hub:
+            erp-api-gateway/src/main/java/com/erp/apigateway/infrastructure/security/JwksKeyManager.java
+            erp-integration-hub/src/main/java/com/erp/integrationhub/infrastructure/security/JwksKeyManager.java
+    [OK]    JwksUrlPolicy.java es identico en gateway y hub
+    [OK]    JwksKeyManagerTest.java es identico en gateway y hub
+
+    Las copias divergen en 1 fichero(s). La duplicacion se ha separado.
+    exit = 1
+
+Se revirtio el cambio y la comprobacion vuelve a pasar.
+
+--- La suite de comprobaciones es la misma en los dos servicios ---
+    erp-api-gateway/src/test/java/com/erp/apigateway/infrastructure/security/JwksKeyManagerTest.java
+    erp-integration-hub/src/test/java/com/erp/integrationhub/infrastructure/security/JwksKeyManagerTest.java
+
+Las dos clases tienen el mismo nombre, los mismos metodos de prueba y las
+mismas aserciones. Un defecto corregido en una de ellas se detecta en la
+otra, porque las dos ejecutan las mismas comprobaciones.

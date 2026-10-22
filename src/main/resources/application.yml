@@ -9,7 +9,10 @@ spring:
 
 erp:
   gateway:
-    jwks-url: ${JWKS_URL:http://localhost:8081/.well-known/jwks.json}
+    # La URL del conjunto de claves debe usar un esquema cifrado. El arranque
+    # falla de forma explicita si no lo hace, y la unica excepcion es el
+    # perfil de desarrollo local (application-dev.yml).
+    jwks-url: ${JWKS_URL:https://auth.erp-automotriz.com/.well-known/jwks.json}
     tenant-service-url: ${TENANT_SERVICE_URL:http://localhost:8082}
     default-timeout-ms: ${DEFAULT_TIMEOUT_MS:10000}
     routes:
@@ -17,6 +20,11 @@ erp:
         path-prefix: /api/v1/auth
         target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
         requires-auth: false
+        timeout-ms: 10000
+      users-service:
+        path-prefix: /api/v1/users
+        target-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+        requires-auth: true
         timeout-ms: 10000
       tenant-service:
         path-prefix: /api/v1/tenants
@@ -28,11 +36,28 @@ erp:
         target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
         requires-auth: false
         timeout-ms: 10000
+      outbox-admin-service:
+        path-prefix: /api/v1/admin/outbox
+        target-url: ${TENANT_SERVICE_URL:http://localhost:8082}
+        requires-auth: true
+        # Rol que el principal tiene que ostentar para usar la ruta. Se
+        # comprueba en el BORDE, antes de reenviar la peticion: una peticion
+        # con un rol insuficiente no llega siquiera a tocar el servicio de
+        # destino.
+        required-role: ADMIN_TALLER
+        timeout-ms: 10000
       fleet-service:
         path-prefix: /api/v1/fleet
         target-url: ${FLEET_SERVICE_URL:http://localhost:8083}
         requires-auth: true
-        timeout-ms: 10000
+        # El plazo que fija el spec para las comunicaciones internas. Con la
+        # validacion asincrona, la ruta solo hace trabajo de base de datos.
+        #
+        # No se declara required-role en el BORDE: el prefijo mezcla lecturas
+        # y escrituras, y el rol depende de la operacion —leer admite tambien
+        # al MECANICO, escribir no—. El filtro fino lo aplica el servicio de
+        # destino, que es quien distingue las operaciones.
+        timeout-ms: 500
       work-order-service:
         path-prefix: /api/v1/work-orders
         target-url: ${WORK_ORDER_SERVICE_URL:http://localhost:8084}

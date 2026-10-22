@@ -61,7 +61,10 @@ public class GatewayRoutingService implements RouteGatewayRequestUseCase {
         if (claims != null) {
             outboundHeaders.put("X-Tenant-ID", List.of(claims.getTenantId().toString()));
             outboundHeaders.put("X-User-ID", List.of(claims.getUserId().toString()));
-            outboundHeaders.put("X-User-Role", List.of(claims.getRole()));
+            // Se propagan TODOS los roles del token: con el singular, un
+            // usuario con varios roles perdia los demas, y downstream acababa
+            // aplicando el primero.
+            outboundHeaders.put("X-User-Role", List.copyOf(claims.getRoles()));
             outboundHeaders.put("X-User-Email", List.of(claims.getEmail()));
         }
 

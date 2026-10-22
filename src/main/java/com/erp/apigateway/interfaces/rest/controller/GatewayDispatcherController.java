@@ -38,10 +38,19 @@ public class GatewayDispatcherController {
 
     private static final Logger log = LoggerFactory.getLogger(GatewayDispatcherController.class);
 
+    /**
+     * Rutas que se sirven sin autenticacion.
+     *
+     * <p>Cada una tiene que existir en el servicio de destino. Una ruta
+     * declarada como publica que no existe no es un problema de seguridad
+     * (no hay nada que proteger), pero es un fallo de configuracion que no
+     * se ve: la peticion simplemente no encuentra nada.
+     */
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/api/v1/auth/login",
-            "/api/v1/auth/register",
             "/api/v1/auth/refresh",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
             "/.well-known/jwks.json",
             "/api/v1/plans"
     );
@@ -100,7 +109,7 @@ public class GatewayDispatcherController {
         // 2. Control de tráfico y concurrencia por taller (si está autenticado)
         UUID tenantId = claims != null ? claims.getTenantId() : null;
         if (tenantId != null) {
-            TenantQuota quota = tenantQuotaPort.getQuota(tenantId);
+            TenantQuota quota = tenantQuotaPort.getQuota(tenantId, bearerTokenOf(inboundRequest));
             executeRateLimitUseCase.evaluateRateLimit(tenantId, quota);
             executeBulkheadUseCase.acquireSlot(tenantId, quota.getMaxConcurrentSlots());
         }
@@ -136,7 +145,8 @@ public class GatewayDispatcherController {
             GatewayProperties.ServiceRoute route = entry.getValue();
             if (path.startsWith(route.getPathPrefix())) {
                 boolean requiresAuth = route.isRequiresAuth() && !isPublicEndpoint(path);
-                return new RouteTarget(entry.getKey(), route.getTargetUrl(), route.getTimeoutMs(), requiresAuth);
+                return new RouteTarget(entry.getKey(), route.getTargetUrl(), route.getTimeoutMs(), requiresAuth,
+                        route.getRequiredRole());
             }
         }
 
@@ -175,6 +185,16 @@ public class GatewayDispatcherController {
             }
         }
         return false;
+    }
+
+    /** Token del llamante, tal cual lo envio, para reenviarlo al destino. */
+    private String bearerTokenOf(InboundRequest inboundRequest) {
+        String authHeader = inboundRequest.getFirstHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authHeader.substring(7).trim();
+        return token.isEmpty() ? null : token;
     }
 
     private String extractOrGenerateTraceId(HttpServletRequest request) {
