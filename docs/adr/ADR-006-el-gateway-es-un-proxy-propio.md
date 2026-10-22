@@ -213,6 +213,29 @@ dicen lo mismo en la misma dirección.
   (1x) + circuit-breaker» en las llamadas internas: el borde es el caso más
   expuesto y el único que no lo cumple.
 
+## Aplicación
+
+Esta decisión **la aplica** el change `harden-gateway-edge` (2026-10-22), que
+cerró los defectos de operación del borde:
+
+- **Hilos virtuales** en lugar de un techo de hilos de plataforma, con Java 21
+  exigido por el *build*.
+- **Interruptor de circuito por destino** (Resilience4j) en el puerto de
+  reenvío, con interruptor de tiempo y **503** propio mientras el circuito
+  está abierto.
+- **Tope del cuerpo por los dos lados**, con lectura acotada de la respuesta.
+- **Métricas por ruta y registro de acceso**, que hacen medible el ASR QA-2.
+- **Las cuatro capas**, como los otros servicios: el dominio ya no depende de
+  la aplicación, y el controlador depende de casos de uso, no de
+  infraestructura.
+- **La suite de contrato del borde**, que es la especificación ejecutable de
+  esta decisión: cualquier reescritura futura del borde —en otro lenguaje,
+  con otro framework o con otra arquitectura— es un **puerto con tests**, no
+  una investigación.
+
+Ninguna de las **condiciones de revisión** de este ADR se ha dado, y ninguna
+ha cambiado.
+
 ## Consecuencias
 
 **Positivas.**
