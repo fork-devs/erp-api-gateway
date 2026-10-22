@@ -129,7 +129,18 @@ class GatewayRouteTableTest {
         }
         Map<String, Object> erp = (Map<String, Object>) raiz.get("erp");
         Map<String, Object> gateway = (Map<String, Object>) erp.get("gateway");
-        return (Map<String, Object>) gateway.get("routes");
+        Map<String, Object> rutas = (Map<String, Object>) gateway.get("routes");
+
+        // Las claves llevan corchetes en el YAML, porque una clave de mapa con
+        // guiones no es un nombre de propiedad valido (hallazgo P0 5.13). Se
+        // quita el contenedor para poder buscarlas por su nombre.
+        Map<String, Object> sinCorchetes = new java.util.LinkedHashMap<>();
+        rutas.forEach((clave, valor) -> sinCorchetes.put(
+                clave.startsWith("[") && clave.endsWith("]")
+                        ? clave.substring(1, clave.length() - 1)
+                        : clave,
+                valor));
+        return sinCorchetes;
     }
 
     @Test
@@ -183,10 +194,14 @@ class GatewayRouteTableTest {
 
         Map<String, ServiceRoute> resultado = new java.util.LinkedHashMap<>();
         for (String nombre : yaml.getObject().stringPropertyNames()) {
-            if (!nombre.startsWith("erp.gateway.routes.")) {
+            // Las claves de la tabla de rutas llevan corchetes, porque una
+            // clave de mapa con guiones no es un nombre de propiedad valido y
+            // el enlazador la descarta en silencio (hallazgo P0 5.13).
+            String prefijo = "erp.gateway.routes[";
+            if (!nombre.startsWith(prefijo)) {
                 continue;
             }
-            String resto = nombre.substring("erp.gateway.routes.".length());
+            String resto = nombre.substring(prefijo.length());
             int punto = resto.indexOf('.');
             if (punto < 0) {
                 continue;

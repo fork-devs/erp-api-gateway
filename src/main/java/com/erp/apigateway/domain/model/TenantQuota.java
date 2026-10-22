@@ -4,6 +4,18 @@ import java.io.Serializable;
 import java.util.UUID;
 
 public final class TenantQuota implements Serializable {
+
+    /**
+     * Limite de trafico por defecto: el del plan MAS BASICO.
+     *
+     * <p>El gateway NO deduce los limites de trafico del codigo de plan: los
+     * posee el tenant-service, que es el dueno del plan (ADR-007). Aqui solo
+     * esta el suelo, para que un limite ausente nunca sea mas alto que el
+     * minimo.
+     */
+    public static final int LIMITE_POR_DEFECTO_POR_MINUTO = 100;
+    public static final int LIMITE_POR_DEFECTO_CONCURRENTES = 15;
+
     private final UUID tenantId;
     private final String status;
     private final String planCode;
@@ -17,36 +29,23 @@ public final class TenantQuota implements Serializable {
         this.tenantId = tenantId;
         this.status = status != null ? status.toUpperCase() : "ACTIVE";
         this.planCode = planCode != null ? planCode.toUpperCase() : "BASICO";
-        this.maxReqPerMin = maxReqPerMin > 0 ? maxReqPerMin : calculateDefaultReqPerMin(this.planCode);
-        this.maxConcurrentSlots = maxConcurrentSlots > 0 ? maxConcurrentSlots : calculateDefaultConcurrentSlots(this.planCode);
+        this.maxReqPerMin = maxReqPerMin > 0 ? maxReqPerMin : LIMITE_POR_DEFECTO_POR_MINUTO;
+        this.maxConcurrentSlots = maxConcurrentSlots > 0 ? maxConcurrentSlots : LIMITE_POR_DEFECTO_CONCURRENTES;
     }
 
+    /**
+     * Cuota minima, usada cuando no se ha podido determinar el estado del
+     * taller. El plan se conserva por trazabilidad, pero los limites de
+     * trafico NO se derivan de el.
+     */
     public static TenantQuota createDefault(UUID tenantId, String planCode) {
         return new TenantQuota(
                 tenantId,
                 "ACTIVE",
                 planCode,
-                calculateDefaultReqPerMin(planCode),
-                calculateDefaultConcurrentSlots(planCode)
+                LIMITE_POR_DEFECTO_POR_MINUTO,
+                LIMITE_POR_DEFECTO_CONCURRENTES
         );
-    }
-
-    private static int calculateDefaultReqPerMin(String planCode) {
-        if (planCode == null) return 100;
-        return switch (planCode.toUpperCase()) {
-            case "ENTERPRISE" -> 2000;
-            case "PRO" -> 500;
-            default -> 100; // BASICO / default
-        };
-    }
-
-    private static int calculateDefaultConcurrentSlots(String planCode) {
-        if (planCode == null) return 15;
-        return switch (planCode.toUpperCase()) {
-            case "ENTERPRISE" -> 100;
-            case "PRO" -> 40;
-            default -> 15; // BASICO
-        };
     }
 
     public boolean isSuspended() {

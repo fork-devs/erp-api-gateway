@@ -52,4 +52,40 @@ class SemaphoreBulkheadTest {
         assertTrue(bulkhead.tryAcquire(tenantB, 1).acquired());
         assertFalse(bulkhead.tryAcquire(tenantB, 1).acquired());
     }
+
+    @Test
+    @DisplayName("Should open more slots when the plan is upgraded")
+    void shouldOpenMoreSlotsWhenThePlanIsUpgraded() {
+        SemaphoreBulkheadAdapter bulkhead = new SemaphoreBulkheadAdapter();
+        UUID tenantId = UUID.randomUUID();
+
+        // Taller en BASICO: 1 slot
+        assertTrue(bulkhead.tryAcquire(tenantId, 1).acquired());
+        assertFalse(bulkhead.tryAcquire(tenantId, 1).acquired());
+
+        // Sube a ENTERPRISE: 100 slots. Deben abrirse de inmediato.
+        for (int i = 0; i < 99; i++) {
+            assertTrue(bulkhead.tryAcquire(tenantId, 100).acquired(),
+                    "el slot " + (i + 2) + " debe abrirse con el limite nuevo");
+        }
+        assertFalse(bulkhead.tryAcquire(tenantId, 100).acquired());
+    }
+
+    @Test
+    @DisplayName("Should not release more slots than acquired")
+    void shouldNotReleaseMoreSlotsThanAcquired() {
+        SemaphoreBulkheadAdapter bulkhead = new SemaphoreBulkheadAdapter();
+        UUID tenantId = UUID.randomUUID();
+
+        assertTrue(bulkhead.tryAcquire(tenantId, 1).acquired());
+        bulkhead.release(tenantId);
+        // Una liberacion de mas no debe abrir un segundo hueco: con el
+        // mamparo en 1, solo puede haber una peticion en vuelo.
+        bulkhead.release(tenantId);
+
+        assertTrue(bulkhead.tryAcquire(tenantId, 1).acquired(),
+                "el hueco liberado debe volver a ser utilizable");
+        assertFalse(bulkhead.tryAcquire(tenantId, 1).acquired(),
+                "una liberacion de mas no debe abrir un segundo hueco");
+    }
 }

@@ -1,28 +1,36 @@
 package com.erp.apigateway.infrastructure.config;
 
 import com.erp.apigateway.application.service.GatewayBulkheadService;
+import com.erp.apigateway.application.service.GatewayQuotaService;
+import com.erp.apigateway.application.service.GatewayRouteResolver;
 import com.erp.apigateway.application.service.GatewayRateLimitingService;
 import com.erp.apigateway.application.service.GatewayRoutingService;
 import com.erp.apigateway.application.service.GatewaySecurityService;
+import com.erp.apigateway.application.usecase.GetTenantQuotaUseCase;
+import com.erp.apigateway.application.usecase.ResolveRouteUseCase;
 import com.erp.apigateway.domain.port.BulkheadPort;
 import com.erp.apigateway.domain.port.JwtValidatorPort;
 import com.erp.apigateway.domain.port.RateLimiterPort;
+import com.erp.apigateway.domain.port.RouteCatalogPort;
 import com.erp.apigateway.domain.port.ReverseProxyPort;
 import com.erp.apigateway.domain.port.TenantQuotaPort;
 import com.erp.apigateway.infrastructure.bulkhead.SemaphoreBulkheadAdapter;
+import com.erp.apigateway.infrastructure.metrics.GatewayMetrics;
 import com.erp.apigateway.infrastructure.client.TenantServiceClientAdapter;
 import com.erp.apigateway.infrastructure.proxy.HttpReverseProxyAdapter;
 import com.erp.apigateway.infrastructure.ratelimit.TokenBucketRateLimiterAdapter;
 import com.erp.apigateway.infrastructure.security.JwksKeyManager;
 import com.erp.apigateway.infrastructure.security.NimbusJwtValidatorAdapter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.web.client.RestClient;
 
 @Configuration
-@EnableConfigurationProperties(GatewayProperties.class)
+@EnableConfigurationProperties({GatewayProperties.class, GatewayResilienceProperties.class})
 public class ApplicationServiceConfig {
 
     @Bean
@@ -41,8 +49,10 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public TenantQuotaPort tenantQuotaPort(GatewayProperties gatewayProperties) {
-        return new TenantServiceClientAdapter(gatewayProperties);
+    public TenantQuotaPort tenantQuotaPort(GatewayProperties gatewayProperties, RestClient.Builder restClientBuilder) {
+        // El builder auto-configurado es el que trae los timeouts: con uno
+        // propio, un tenant-service colgado bloqueaba el hilo (6.31).
+        return new TenantServiceClientAdapter(gatewayProperties, restClientBuilder);
     }
 
     @Bean
@@ -56,8 +66,16 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public ReverseProxyPort reverseProxyPort() {
-        return new HttpReverseProxyAdapter();
+    public GatewayMetrics gatewayMetrics(MeterRegistry meterRegistry) {
+        return new GatewayMetrics(meterRegistry);
+    }
+
+    @Bean
+    public ReverseProxyPort reverseProxyPort(
+            GatewayProperties gatewayProperties,
+            GatewayResilienceProperties resilienceProperties,
+            GatewayMetrics gatewayMetrics) {
+        return new HttpReverseProxyAdapter(resilienceProperties, gatewayProperties.bodyLimits(), gatewayMetrics);
     }
 
     @Bean
@@ -78,7 +96,19 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public GatewayRoutingService gatewayRoutingService(ReverseProxyPort reverseProxyPort) {
-        return new GatewayRoutingService(reverseProxyPort);
+    public GatewayRoutingService gatewayRoutingService(
+            ReverseProxyPort reverseProxyPort,
+            GatewayMetrics gatewayMetrics) {
+        return new GatewayRoutingService(reverseProxyPort, gatewayMetrics);
+    }
+
+    @Bean
+    public ResolveRouteUseCase resolveRouteUseCase(RouteCatalogPort routeCatalogPort) {
+        return new GatewayRouteResolver(routeCatalogPort);
+    }
+
+    @Bean
+    public GetTenantQuotaUseCase getTenantQuotaUseCase(TenantQuotaPort tenantQuotaPort) {
+        return new GatewayQuotaService(tenantQuotaPort);
     }
 }
