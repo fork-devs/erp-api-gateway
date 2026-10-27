@@ -1,0 +1,47 @@
+# =============================================================================
+# ERP API GATEWAY — ENTORNO LOCAL (KONG OSS DB-LESS + REDIS)
+# =============================================================================
+# Levanta Kong Gateway en modo declarativo sin base de datos junto con Redis
+# para pruebas locales de enrutamiento y rate-limiting distribuido.
+# =============================================================================
+
+services:
+  kong-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: erp-kong-gateway
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/etc/kong/kong.yml
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001
+      - REDIS_HOST=redis-ratelimit
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    ports:
+      - '8000:8000' # Proxy Publico
+      - '8001:8001' # Admin API (solo en entorno local/dev)
+    depends_on:
+      - redis-ratelimit
+    networks:
+      - erp-network
+
+  redis-ratelimit:
+    image: 'redis:7-alpine'
+    container_name: erp-gateway-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_gateway_data:/data
+    networks:
+      - erp-network
+
+networks:
+  erp-network:
+    name: erp-network
+    driver: bridge
+
+volumes:
+  redis_gateway_data:
