@@ -1,0 +1,199 @@
+_format_version: "3.0"
+
+# =============================================================================
+# KONG GATEWAY DECLARATIVE CONFIGURATION (DB-LESS) — DRIVEOS WORKSHOP
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. IAM & AUTHENTICATION SERVICE (Puerto 8081)
+  # ---------------------------------------------------------------------------
+  - name: erp-auth-service
+    url: http://erp-auth-service:8081
+    connect_timeout: 5000
+    read_timeout: 10000
+    write_timeout: 10000
+    routes:
+      - name: auth-public-routes
+        paths:
+          - /api/v1/auth/login
+          - /api/v1/auth/refresh
+          - /api/v1/auth/forgot-password
+          - /api/v1/auth/reset-password
+          - /.well-known/jwks.json
+        strip_path: false
+      - name: auth-protected-routes
+        paths:
+          - /api/v1/auth/logout
+          - /api/v1/users
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 2. TENANT MANAGEMENT SERVICE (Puerto 8082)
+  # ---------------------------------------------------------------------------
+  - name: erp-tenant-service
+    url: http://erp-tenant-service:8082
+    connect_timeout: 5000
+    read_timeout: 10000
+    write_timeout: 10000
+    routes:
+      - name: tenant-plans-public-route
+        paths:
+          - /api/v1/plans
+        strip_path: false
+      - name: tenant-protected-routes
+        paths:
+          - /api/v1/tenants
+          - /api/v1/admin/outbox
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 3. FLEET SERVICE (Clientes y Vehiculos - Puerto 8083)
+  # ---------------------------------------------------------------------------
+  - name: erp-fleet-service
+    url: http://erp-fleet-service:8083
+    connect_timeout: 5000
+    read_timeout: 10000
+    write_timeout: 10000
+    routes:
+      - name: fleet-routes
+        paths:
+          - /api/v1/fleet
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 4. INVENTORY SERVICE (Repuestos y Stock FIFO - Puerto 8084)
+  # ---------------------------------------------------------------------------
+  - name: erp-inventory-service
+    url: http://erp-inventory-service:8084
+    connect_timeout: 5000
+    read_timeout: 10000
+    write_timeout: 10000
+    routes:
+      - name: inventory-routes
+        paths:
+          - /api/v1/inventory
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 5. INTEGRATION HUB (SUNAT, Stripe, RENIEC - Puerto 8085)
+  # ---------------------------------------------------------------------------
+  - name: erp-integration-hub
+    url: http://erp-integration-hub:8085
+    connect_timeout: 5000
+    read_timeout: 15000
+    write_timeout: 15000
+    routes:
+      - name: integration-webhooks-routes
+        paths:
+          - /api/v1/integrations/webhooks/stripe
+          - /api/v1/integrations/webhooks/nubefact
+        strip_path: false
+      - name: integration-protected-routes
+        paths:
+          - /api/v1/integrations
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 6. WORK ORDER SERVICE (Ordenes de Trabajo y Sagas - Puerto 8088)
+  # ---------------------------------------------------------------------------
+  - name: erp-work-order-service
+    url: http://erp-work-order-service:8088
+    connect_timeout: 5000
+    read_timeout: 15000
+    write_timeout: 15000
+    routes:
+      - name: work-order-routes
+        paths:
+          - /api/v1/work-orders
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+# =============================================================================
+# PLUGINS GLOBALES
+# =============================================================================
+plugins:
+  # 1. Habilitar CORS para clientes Web y Mobile
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - X-Requested-With
+      exposed_headers:
+        - Content-Length
+        - X-Request-ID
+      credentials: true
+      max_age: 3600
+
+  # 2. Seguridad Multi-tenant: Sanitizar cabecera externa X-Tenant-ID
+  - name: request-transformer
+    config:
+      remove:
+        headers:
+          - x-tenant-id
+          - X-Tenant-ID
+          - X-TENANT-ID
+
+  # 3. Rate Limiting distribuido respaldado por Redis
+  - name: rate-limiting
+    config:
+      minute: 120
+      hour: 3600
+      policy: redis
+      redis_host: ${REDIS_HOST:redis}
+      redis_port: ${REDIS_PORT:6379}
+      redis_password: ${REDIS_PASSWORD}
+      fault_tolerant: true
+      hide_client_headers: false

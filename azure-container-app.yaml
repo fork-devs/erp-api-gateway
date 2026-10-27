@@ -1,0 +1,51 @@
+# =============================================================================
+# MANIFIESTO AZURE CONTAINER APPS (ACA) — ERP API GATEWAY (KONG OSS)
+# =============================================================================
+# Despliegue de Kong Gateway en Azure Container Apps con Ingress publico,
+# terminacion TLS y escalado elástico.
+# =============================================================================
+
+apiVersion: 2024-03-01
+location: eastus2
+name: erp-api-gateway
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: /subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/${ACA_ENVIRONMENT_NAME}
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: true
+      targetPort: 8000
+      transport: auto
+      allowInsecure: false
+    secrets:
+      - name: redis-password
+        value: ${REDIS_PASSWORD}
+  template:
+    containers:
+      - name: kong-gateway
+        image: ${ACR_NAME}.azurecr.io/erp-api-gateway:latest
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        env:
+          - name: KONG_DATABASE
+            value: "off"
+          - name: KONG_DECLARATIVE_CONFIG
+            value: "/etc/kong/kong.yml"
+          - name: REDIS_HOST
+            value: "erp-redis-service"
+          - name: REDIS_PORT
+            value: "6379"
+          - name: REDIS_PASSWORD
+            secretRef: redis-password
+          - name: KONG_ADMIN_LISTEN
+            value: "off"
+    scale:
+      minReplicas: 1
+      maxReplicas: 5
+      rules:
+        - name: http-scaling-rule
+          http:
+            metadata:
+              concurrentRequests: "100"
