@@ -1,8 +1,0 @@
-# Perfil de desarrollo local.
-#
-# Es el UNICO perfil en el que la URL del conjunto de claves puede ir en
-# claro: el emisor se sirve en la propia maquina, y no hay camino que
-# interceptar. Fuera de este perfil, el arranque falla si la URL no usa https.
-erp:
-  gateway:
-    jwks-url: ${JWKS_URL:http://localhost:8081/.well-known/jwks.json}
