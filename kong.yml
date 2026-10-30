@@ -150,6 +150,27 @@ services:
               jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
               bearer_only: "yes"
 
+  # ---------------------------------------------------------------------------
+  # 7. BILLING SERVICE (Facturacion y Pagos - Puerto 8086)
+  # ---------------------------------------------------------------------------
+  - name: erp-billing-service
+    url: http://erp-billing-service:8086
+    connect_timeout: 5000
+    read_timeout: 15000
+    write_timeout: 15000
+    routes:
+      - name: billing-routes
+        paths:
+          - /api/v1/billing
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
 # =============================================================================
 # PLUGINS GLOBALES
 # =============================================================================
