@@ -73,6 +73,7 @@ services:
       - name: fleet-routes
         paths:
           - /api/v1/fleet
+          - /api/v1/appointments
         strip_path: false
         plugins:
           - name: openid-connect
