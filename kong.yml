@@ -213,6 +213,27 @@ services:
               jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
               bearer_only: "yes"
 
+  # ---------------------------------------------------------------------------
+  # 10. ANALYTICS SERVICE (Reportes y Métricas Operativas OLAP - Puerto 8090)
+  # ---------------------------------------------------------------------------
+  - name: erp-analytics-service
+    url: http://erp-analytics-service:8090
+    connect_timeout: 3000
+    read_timeout: 5000
+    write_timeout: 5000
+    routes:
+      - name: analytics-routes
+        paths:
+          - /api/v1/analytics
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
 # =============================================================================
 # PLUGINS GLOBALES
 # =============================================================================
