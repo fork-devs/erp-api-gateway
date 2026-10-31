@@ -125,10 +125,12 @@ services:
         paths:
           - /api/v1/integrations/webhooks/stripe
           - /api/v1/integrations/webhooks/nubefact
+          - /api/v1/integrations/webhooks/mercadopago
         strip_path: false
       - name: integration-protected-routes
         paths:
           - /api/v1/integrations
+          - /api/v1/media
         strip_path: false
         plugins:
           - name: openid-connect
@@ -175,6 +177,8 @@ services:
           - /api/v1/billing
           - /api/v1/quotes
           - /api/v1/checkouts
+          - /api/v1/vouchers
+          - /api/v1/payments
         strip_path: false
         plugins:
           - name: openid-connect
