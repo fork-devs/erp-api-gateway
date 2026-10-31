@@ -79,6 +79,8 @@ services:
         paths:
           - /api/v1/fleet
           - /api/v1/appointments
+          - /api/v1/customer-registrations
+          - /api/v1/employee-registrations
         strip_path: false
         plugins:
           - name: openid-connect
