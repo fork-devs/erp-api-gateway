@@ -79,6 +79,8 @@ services:
       - name: fleet-routes
         paths:
           - /api/v1/fleet
+          - /api/v1/customers
+          - /api/v1/vehicles
           - /api/v1/appointments
           - /api/v1/customer-registrations
           - /api/v1/employee-registrations
@@ -130,6 +132,7 @@ services:
       - name: integration-protected-routes
         paths:
           - /api/v1/integrations
+          - /api/v1/identity-validations
           - /api/v1/media
         strip_path: false
         plugins:
