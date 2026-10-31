@@ -164,6 +164,8 @@ services:
       - name: billing-routes
         paths:
           - /api/v1/billing
+          - /api/v1/quotes
+          - /api/v1/checkouts
         strip_path: false
         plugins:
           - name: openid-connect
