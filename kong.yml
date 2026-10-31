@@ -141,6 +141,8 @@ services:
       - name: work-order-routes
         paths:
           - /api/v1/work-orders
+          - /api/v1/work-order-tasks
+          - /api/v1/services
         strip_path: false
         plugins:
           - name: openid-connect
