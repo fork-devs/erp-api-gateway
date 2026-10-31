@@ -51,6 +51,7 @@ services:
       - name: tenant-protected-routes
         paths:
           - /api/v1/tenants
+          - /api/v1/workshops
           - /api/v1/admin/outbox
         strip_path: false
         plugins:
