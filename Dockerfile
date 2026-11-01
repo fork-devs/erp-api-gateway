@@ -1,12 +1,15 @@
-FROM kong:3.6-alpine
+FROM kong:3.6
 
 USER root
 
 # Install plugins for JWKS and OIDC token validation
-RUN apk add --no-cache git unzip curl openssl-dev build-base && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git unzip curl libssl-dev build-essential && \
     luarocks install kong-openid-connect && \
     luarocks install lua-resty-openidc && \
-    apk del git unzip build-base
+    apt-get purge -y git unzip build-essential && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # Declarative routing configuration
 COPY kong.yml /etc/kong/kong.yml
