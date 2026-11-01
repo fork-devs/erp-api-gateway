@@ -1,18 +1,17 @@
-# Official Kong Gateway OSS base image
 FROM kong:3.6-alpine
 
 USER root
 
-# Install dependencies and plugins for JWKS and OIDC token validation
+# Install plugins for JWKS and OIDC token validation
 RUN apk add --no-cache git unzip curl openssl-dev build-base && \
     luarocks install kong-openid-connect && \
     luarocks install lua-resty-openidc && \
     apk del git unzip build-base
 
-# Copy declarative GitOps routing configuration
+# Declarative routing configuration
 COPY kong.yml /etc/kong/kong.yml
 
-# DB-less execution configuration
+# DB-less execution settings
 ENV KONG_DATABASE=off \
     KONG_DECLARATIVE_CONFIG=/etc/kong/kong.yml \
     KONG_PLUGINS=bundled,openid-connect \
