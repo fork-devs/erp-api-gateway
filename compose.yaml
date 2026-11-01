@@ -16,15 +16,16 @@ services:
       - KONG_DECLARATIVE_CONFIG=/etc/kong/kong.yml
       - KONG_PROXY_ACCESS_LOG=/dev/stdout
       - KONG_PROXY_ERROR_LOG=/dev/stderr
-      - KONG_ADMIN_LISTEN=0.0.0.0:8001
+      - KONG_ADMIN_LISTEN=127.0.0.1:8001
       - REDIS_HOST=redis-ratelimit
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     ports:
       - '8000:8000' # Proxy Publico
-      - '8001:8001' # Admin API (solo en entorno local/dev)
+      - '127.0.0.1:8001:8001' # Admin API protegida (solo accesible localmente)
     depends_on:
-      - redis-ratelimit
+      redis-ratelimit:
+        condition: service_healthy
     networks:
       - erp-network
 
@@ -32,9 +33,14 @@ services:
     image: 'redis:7-alpine'
     container_name: erp-gateway-redis
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis_gateway_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - erp-network
 

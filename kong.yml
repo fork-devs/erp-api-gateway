@@ -20,6 +20,7 @@ services:
           - /api/v1/auth/refresh
           - /api/v1/auth/forgot-password
           - /api/v1/auth/reset-password
+          - /api/v1/authentication
           - /.well-known/jwks.json
         strip_path: false
       - name: auth-protected-routes
@@ -51,6 +52,11 @@ services:
       - name: tenant-protected-routes
         paths:
           - /api/v1/tenants
+          - /api/v1/workshops
+          - /api/v1/branches
+          - /api/v1/employees
+          - /api/v1/owners
+          - /api/v1/profiles
           - /api/v1/admin/outbox
         strip_path: false
         plugins:
@@ -73,6 +79,11 @@ services:
       - name: fleet-routes
         paths:
           - /api/v1/fleet
+          - /api/v1/customers
+          - /api/v1/vehicles
+          - /api/v1/appointments
+          - /api/v1/customer-registrations
+          - /api/v1/employee-registrations
         strip_path: false
         plugins:
           - name: openid-connect
@@ -116,10 +127,13 @@ services:
         paths:
           - /api/v1/integrations/webhooks/stripe
           - /api/v1/integrations/webhooks/nubefact
+          - /api/v1/integrations/webhooks/mercadopago
         strip_path: false
       - name: integration-protected-routes
         paths:
           - /api/v1/integrations
+          - /api/v1/identity-validations
+          - /api/v1/media
         strip_path: false
         plugins:
           - name: openid-connect
@@ -141,6 +155,101 @@ services:
       - name: work-order-routes
         paths:
           - /api/v1/work-orders
+          - /api/v1/work-order-tasks
+          - /api/v1/services
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 7. BILLING SERVICE (Facturacion y Pagos - Puerto 8086)
+  # ---------------------------------------------------------------------------
+  - name: erp-billing-service
+    url: http://erp-billing-service:8086
+    connect_timeout: 5000
+    read_timeout: 15000
+    write_timeout: 15000
+    routes:
+      - name: billing-routes
+        paths:
+          - /api/v1/billing
+          - /api/v1/quotes
+          - /api/v1/checkouts
+          - /api/v1/vouchers
+          - /api/v1/payments
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 8. IOT INGESTION SERVICE (Telemetria Vehicular - Puerto 8087)
+  # ---------------------------------------------------------------------------
+  - name: erp-iot-ingestion
+    url: http://erp-iot-ingestion:8087
+    connect_timeout: 3000
+    read_timeout: 5000
+    write_timeout: 5000
+    routes:
+      - name: iot-ingestion-routes
+        paths:
+          - /api/v1/iot/telemetry
+          - /api/v1/obd2-devices
+          - /api/v1/obd2-device-registrations
+          - /api/v1/telemetry-batches
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 9. IOT PROCESSOR SERVICE (Diagnosticos y Alarmas Vehiculares - Puerto 8088)
+  # ---------------------------------------------------------------------------
+  - name: erp-iot-processor
+    url: http://erp-iot-processor:8088
+    connect_timeout: 3000
+    read_timeout: 5000
+    write_timeout: 5000
+    routes:
+      - name: iot-processor-routes
+        paths:
+          - /api/v1/iot/diagnostics
+          - /api/v1/iot/vehicles
+          - /api/v1/vehicles
+        strip_path: false
+        plugins:
+          - name: openid-connect
+            config:
+              issuer: http://erp-auth-service:8081
+              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
+              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
+              bearer_only: "yes"
+
+  # ---------------------------------------------------------------------------
+  # 10. ANALYTICS SERVICE (Reportes y Métricas Operativas OLAP - Puerto 8090)
+  # ---------------------------------------------------------------------------
+  - name: erp-analytics-service
+    url: http://erp-analytics-service:8090
+    connect_timeout: 3000
+    read_timeout: 5000
+    write_timeout: 5000
+    routes:
+      - name: analytics-routes
+        paths:
+          - /api/v1/analytics
         strip_path: false
         plugins:
           - name: openid-connect
