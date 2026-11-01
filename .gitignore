@@ -37,3 +37,8 @@ build/
 .env.local
 *.env
 
+
+# Local tooling & specifications
+docs/
+openspec/
+.opencode/
