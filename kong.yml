@@ -147,7 +147,7 @@ services:
   # 6. WORK ORDER SERVICE (Ordenes de Trabajo y Sagas - Puerto 8088)
   # ---------------------------------------------------------------------------
   - name: erp-work-order-service
-    url: http://erp-work-order-service:8088
+    url: http://erp-work-order-service:8087
     connect_timeout: 5000
     read_timeout: 15000
     write_timeout: 15000
@@ -195,7 +195,7 @@ services:
   # 8. IOT INGESTION SERVICE (Telemetria Vehicular - Puerto 8087)
   # ---------------------------------------------------------------------------
   - name: erp-iot-ingestion
-    url: http://erp-iot-ingestion:8087
+    url: http://erp-iot-ingestion:8089
     connect_timeout: 3000
     read_timeout: 5000
     write_timeout: 5000
