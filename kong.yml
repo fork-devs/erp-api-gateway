@@ -228,7 +228,7 @@ services:
         paths:
           - /api/v1/iot/diagnostics
           - /api/v1/iot/vehicles
-          - /api/v1/vehicles
+          - ~/api/v1/vehicles/[^/]+/(telemetry-snapshots|dtc-alerts)
         strip_path: false
         plugins:
           - name: openid-connect
