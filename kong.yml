@@ -29,12 +29,11 @@ services:
           - /api/v1/users
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 2. TENANT MANAGEMENT SERVICE (Puerto 8082)
@@ -60,12 +59,11 @@ services:
           - /api/v1/admin/outbox
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 3. FLEET SERVICE (Clientes y Vehiculos - Puerto 8083)
@@ -86,12 +84,11 @@ services:
           - /api/v1/employee-registrations
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 4. INVENTORY SERVICE (Repuestos y Stock FIFO - Puerto 8084)
@@ -107,12 +104,11 @@ services:
           - /api/v1/inventory
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 5. INTEGRATION HUB (SUNAT, Stripe, RENIEC - Puerto 8085)
@@ -136,12 +132,11 @@ services:
           - /api/v1/media
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 6. WORK ORDER SERVICE (Ordenes de Trabajo y Sagas - Puerto 8088)
@@ -159,12 +154,11 @@ services:
           - /api/v1/services
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 7. BILLING SERVICE (Facturacion y Pagos - Puerto 8086)
@@ -184,12 +178,11 @@ services:
           - /api/v1/payments
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 8. IOT INGESTION SERVICE (Telemetria Vehicular - Puerto 8087)
@@ -208,12 +201,11 @@ services:
           - /api/v1/telemetry-batches
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 9. IOT PROCESSOR SERVICE (Diagnosticos y Alarmas Vehiculares - Puerto 8088)
@@ -231,12 +223,11 @@ services:
           - ~/api/v1/vehicles/[^/]+/(telemetry-snapshots|dtc-alerts)
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
   # ---------------------------------------------------------------------------
   # 10. ANALYTICS SERVICE (Reportes y Métricas Operativas OLAP - Puerto 8090)
@@ -252,22 +243,43 @@ services:
           - /api/v1/analytics
         strip_path: false
         plugins:
-          - name: openid-connect
+          - name: jwt
             config:
-              issuer: http://erp-auth-service:8081
-              discovery: http://erp-auth-service:8081/.well-known/openid-configuration
-              jwks_uri: http://erp-auth-service:8081/.well-known/jwks.json
-              bearer_only: "yes"
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
 
 # =============================================================================
 # PLUGINS GLOBALES
 # =============================================================================
+  # ---------------------------------------------------------------------------
+  # 11. IOT TRAFFIC SIMULATOR (Puerto 8089)
+  # ---------------------------------------------------------------------------
+  - name: erp-iot-simulator
+    url: http://erp-iot-simulator:8089
+    connect_timeout: 5000
+    read_timeout: 10000
+    write_timeout: 10000
+    routes:
+      - name: iot-simulator-routes
+        paths:
+          - /api/v1/simulator
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+
 plugins:
   # 1. Habilitar CORS para clientes Web y Mobile
   - name: cors
     config:
       origins:
-        - "*"
+        - ${CORS_ALLOWED_ORIGIN:https://app.driveos.pe}
+        - http://localhost:3000
+        - http://localhost:5173
       methods:
         - GET
         - POST
@@ -295,14 +307,25 @@ plugins:
           - X-Tenant-ID
           - X-TENANT-ID
 
-  # 3. Rate Limiting distribuido respaldado por Redis
+  # 3. Rate Limiting distribuido respaldado por Redis (env-driven para Azure Cache for Redis)
   - name: rate-limiting
     config:
       minute: 120
       hour: 3600
-      policy: redis
+      policy: ${RATE_LIMIT_POLICY:redis}
       redis_host: ${REDIS_HOST:redis}
       redis_port: ${REDIS_PORT:6379}
       redis_password: ${REDIS_PASSWORD}
+      redis_ssl: ${REDIS_SSL:false}
+      redis_ssl_verify: ${REDIS_SSL_VERIFY:false}
+      redis_database: ${REDIS_DATABASE:0}
       fault_tolerant: true
       hide_client_headers: false
+
+consumers:
+  - username: driveos-platform
+    jwt_secrets:
+      - key: "${JWT_ISSUER:erp-auth-service}"
+        algorithm: RS256
+        rsa_public_key: |
+          ${JWT_PUBLIC_KEY}
