@@ -219,6 +219,7 @@ services:
       - name: iot-processor-routes
         paths:
           - /api/v1/iot/diagnostics
+          - /api/v1/iot/alerts
           - /api/v1/iot/vehicles
           - ~/api/v1/vehicles/[^/]+/(telemetry-snapshots|dtc-alerts)
         strip_path: false
