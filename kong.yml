@@ -111,7 +111,7 @@ services:
                 - exp
 
   # ---------------------------------------------------------------------------
-  # 5. INTEGRATION HUB (SUNAT, Stripe, RENIEC - Puerto 8085)
+  # 5. INTEGRATION HUB (SUNAT, Mercado Pago, RENIEC - Puerto 8085)
   # ---------------------------------------------------------------------------
   - name: erp-integration-hub
     url: http://erp-integration-hub:8085
@@ -121,7 +121,6 @@ services:
     routes:
       - name: integration-webhooks-routes
         paths:
-          - /api/v1/integrations/webhooks/stripe
           - /api/v1/integrations/webhooks/nubefact
           - /api/v1/integrations/webhooks/mercadopago
         strip_path: false
