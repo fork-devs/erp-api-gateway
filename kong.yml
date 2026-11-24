@@ -77,7 +77,6 @@ services:
     routes:
       - name: fleet-routes
         paths:
-          - /api/v1/fleet
           - /api/v1/customers
           - /api/v1/vehicles
           - /api/v1/appointments
@@ -220,7 +219,6 @@ services:
       - name: iot-processor-routes
         paths:
           - /api/v1/iot/diagnostics
-          - /api/v1/iot/vehicles
           - ~/api/v1/vehicles/[^/]+/(telemetry-snapshots|dtc-alerts)
           - ~/api/v1/obd2-device-registrations/[^/]+/(telemetry-snapshots|dtc-alerts)
         strip_path: false
