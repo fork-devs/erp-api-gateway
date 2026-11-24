@@ -56,6 +56,7 @@ services:
           - /api/v1/employees
           - /api/v1/owners
           - /api/v1/profiles
+          - /api/v1/permissions
           - /api/v1/admin/outbox
         strip_path: false
         plugins:
@@ -221,6 +222,7 @@ services:
           - /api/v1/iot/diagnostics
           - /api/v1/iot/vehicles
           - ~/api/v1/vehicles/[^/]+/(telemetry-snapshots|dtc-alerts)
+          - ~/api/v1/obd2-device-registrations/[^/]+/(telemetry-snapshots|dtc-alerts)
         strip_path: false
         plugins:
           - name: jwt
